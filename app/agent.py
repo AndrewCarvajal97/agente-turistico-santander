@@ -27,13 +27,6 @@ SYSTEM_PROMPT = (
     "sin notas de proceso, encabezados internos ni texto de razonamiento."
 )
 
-SYSTEM_PROMPT_RESUMEN = (
-    "Eres un asistente que resume conversaciones. Genera un resumen breve (máximo "
-    "120 palabras), en español, que conserve los datos importantes: qué ha preguntado "
-    "el usuario, sus intereses y cualquier detalle útil para dar continuidad. "
-    "Integra el resumen previo con los intercambios nuevos en un solo texto."
-)
-
 
 class TourismAgent:
     """Agente que responde preguntas sobre la guía turística de Santander."""
@@ -85,15 +78,6 @@ class TourismAgent:
             mensaje, SYSTEM_PROMPT, max_tokens=settings.max_output_tokens
         )
         return {"respuesta": respuesta, "fuente": self.fuente}
-
-    def resumir(self, texto: str, resumen_previo: str = "") -> str:
-        """Comprime un tramo de conversación en un resumen breve (para la memoria)."""
-        mensaje = (
-            f"### Resumen previo:\n{resumen_previo or '(sin resumen previo)'}\n\n"
-            f"### Intercambios nuevos a integrar:\n{texto}\n\n"
-            f"### Resumen actualizado:"
-        )
-        return self._llamar_modelo(mensaje, SYSTEM_PROMPT_RESUMEN, max_tokens=4096)
 
     # ------------------------------------------------------------------ #
     # Llamada al modelo (con reintentos)

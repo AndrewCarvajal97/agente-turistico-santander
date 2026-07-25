@@ -36,12 +36,10 @@ class Settings:
     # Documento fuente
     pdf_path: str = _get("PDF_PATH", "data/guia_turistica_santander.pdf")
 
-    # Memoria de conversaciones por sesión (persistencia en archivos)
-    memory_dir: str = _get("MEMORY_DIR", "data/memoria")
-    # Tamaño (en caracteres) del bloque reciente antes de resumir la memoria.
-    memory_max_chars: int = int(_get("MEMORY_MAX_CHARS", "2500") or 2500)
-    # Mínimo de intercambios recientes que se conservan siempre de forma literal.
-    memory_min_turns: int = int(_get("MEMORY_MIN_TURNS", "3") or 3)
+    # Memoria de conversaciones: un único CSV para todas las sesiones.
+    history_csv: str = _get("HISTORY_CSV", "data/historial.csv")
+    # Cuántos intercambios recientes de la sesión se usan como contexto.
+    memory_max_turns: int = int(_get("MEMORY_MAX_TURNS", "6") or 6)
 
     def validar(self) -> None:
         """Lanza un error claro si falta configuración esencial del proveedor activo."""

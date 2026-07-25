@@ -88,17 +88,11 @@ def ask(entrada: PreguntaIn, request: Request) -> RespuestaOut:
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"Error al generar respuesta: {exc}")
 
-    # Persistimos el intercambio en la memoria de la sesión (con resumen
-    # automático si supera el límite). No rompe la respuesta si el guardado falla.
+    # Persistimos el intercambio en el CSV de memoria. No rompe la respuesta si
+    # el guardado falla.
     if session_id:
         try:
-            memory.guardar_turno(
-                session_id,
-                entrada.pregunta,
-                resultado["respuesta"],
-                ip=ip,
-                resumidor=agent.resumir,
-            )
+            memory.guardar_turno(session_id, entrada.pregunta, resultado["respuesta"], ip=ip)
         except Exception as exc:  # noqa: BLE001
             print(f"[memory] No se pudo guardar la conversación -> {exc}")
 
@@ -106,10 +100,18 @@ def ask(entrada: PreguntaIn, request: Request) -> RespuestaOut:
 
 
 @app.get("/history")
-def history(session_id: str = "") -> dict:
-    """Sin session_id: lista todas las sesiones. Con session_id: detalle de una."""
+def history(session_id: str = "", q: str = "") -> dict:
+    """Memoria (CSV):
+    - `q`: busca un término en preguntas/respuestas (filtro pandas).
+    - `session_id`: devuelve el historial de esa sesión.
+    - sin parámetros: lista un resumen de todas las sesiones.
+    """
+    if q:
+        resultados = memory.buscar(q)
+        return {"busqueda": q, "coincidencias": len(resultados), "resultados": resultados}
     if session_id:
-        return memory.cargar(session_id)
+        turnos = memory.historial_sesion(session_id).to_dict(orient="records")
+        return {"session_id": session_id, "turnos": turnos}
     sesiones = memory.listar_sesiones()
     return {"total_sesiones": len(sesiones), "sesiones": sesiones}
 

@@ -54,9 +54,12 @@ que el modelo invente información fuera del documento.
 1. **Al iniciar:** se lee el PDF y su texto queda cargado en memoria como contexto.
 2. **Por cada pregunta:** se envía a Gemini el documento + la pregunta, con instrucciones de
    responder únicamente con base en el documento.
-3. **Persistencia:** cada interacción (pregunta + respuesta) se guarda en un archivo JSONL
-   (`data/historial_conversaciones.jsonl`) mediante el servicio `memory.py`, dando al agente
-   una "memoria" de las conversaciones que se puede consultar con el endpoint `GET /history`.
+3. **Memoria por sesión (CSV + pandas):** cada usuario se identifica con un `session_id`
+   generado en el frontend (sin registro). Cada intercambio se guarda como una fila en
+   `data/historial.csv`. **Antes de responder**, el sistema lee el CSV y **filtra por
+   `session_id`** (`df[df["session_id"] == sid]`) para recuperar la conversación previa y
+   dar continuidad. El endpoint `GET /history` permite listar sesiones, ver una sesión o
+   **buscar** un término (`?q=...`, filtro `str.contains`).
 
 ### Estructura del repositorio
 
@@ -66,18 +69,16 @@ alura-latam/
 │   ├── main.py          # API FastAPI (endpoints + interfaz)
 │   ├── agent.py         # Lógica del agente (carga del PDF + generación con Gemini)
 │   ├── pdf_loader.py    # Lectura y limpieza del texto del PDF
-│   ├── memory.py        # Persistencia de conversaciones en archivo (JSONL)
+│   ├── memory.py        # Memoria de conversaciones en CSV (pandas + filtros)
+│   ├── llm.py           # Capa multi-proveedor de LLM (Gemini o Groq)
 │   ├── llm_client.py    # Cliente de Google Gemini
 │   └── config.py        # Configuración desde variables de entorno
 ├── static/index.html    # Interfaz web de chat
-├── scripts/
-│   └── generar_respuestas.py  # Lote: preguntas.txt -> agente -> CSV (pandas)
 ├── tests/test_agent.py  # Tests unitarios (sin llamar a la API)
 ├── data/
 │   ├── guia_turistica_santander.pdf   # Documento fuente
 │   ├── guia_turistica_santander.md    # Versión editable
-│   ├── preguntas.txt                  # Preguntas para el proceso por lotes
-│   └── respuestas.csv                 # Respuestas generadas (salida del lote)
+│   └── historial.csv                  # Memoria de conversaciones (generado en runtime)
 ├── docs/                # Diagramas y capturas del deploy
 ├── requirements.txt
 ├── Dockerfile
@@ -95,6 +96,7 @@ alura-latam/
 | API web          | FastAPI + Uvicorn                             |
 | IA / LLM         | **Google Gemini** o **Groq** (Llama/Gemma, open source) — conmutable |
 | Lectura de PDF   | pypdf                                         |
+| Memoria / datos  | pandas (CSV de sesiones, filtros)             |
 | Nube / Deploy    | Oracle Cloud Infrastructure (OCI Compute)     |
 | Frontend         | HTML + CSS + JavaScript (vanilla)             |
 | Testing          | pytest                                        |

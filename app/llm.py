@@ -56,8 +56,10 @@ def _generar_groq(mensaje: str, system_instruction: str, max_tokens: int) -> str
             "Falta GROQ_API_KEY. Obtén una gratis en https://console.groq.com/keys"
         )
     cliente = Groq(api_key=settings.groq_api_key)
-    # Groq no usa "pensamiento" interno; con 8192 tokens sobra y nunca se trunca.
-    tope = min(max_tokens, 8192)
+    # Groq (Llama) no usa "pensamiento" interno, así que las respuestas caben de
+    # sobra en ~1024 tokens. Mantenerlo bajo evita superar el límite de tokens
+    # por minuto (TPM) del free tier, ya que el tope reservado cuenta para la cuota.
+    tope = min(max_tokens, 1024)
     respuesta = cliente.chat.completions.create(
         model=settings.groq_model,
         messages=[

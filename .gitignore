@@ -13,7 +13,8 @@ __pycache__/
 data/index.npz
 data/*.index
 
-# Memoria de conversaciones por sesión (datos generados en runtime)
+# Memoria de conversaciones (datos generados en runtime)
+data/historial.csv
 data/memoria/
 data/*.jsonl
 

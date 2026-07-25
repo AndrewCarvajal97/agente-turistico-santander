@@ -40,41 +40,53 @@ def test_pregunta_vacia_no_llama_al_modelo():
     assert "respuesta" in resultado and "fuente" in resultado
 
 
-def test_memoria_por_sesion_guarda_y_recuerda(tmp_path):
-    memoria = ConversationMemory(dir_base=tmp_path, max_chars=10_000, turnos_min=3)
+def test_memoria_csv_guarda_filtra_y_recuerda(tmp_path):
+    csv = tmp_path / "historial.csv"
+    memoria = ConversationMemory(ruta_csv=csv, max_turnos=6)
     sid = "sess-test"
     assert memoria.es_recurrente(sid) is False
 
     memoria.guardar_turno(sid, "¿Capital?", "Bucaramanga", ip="1.2.3.4")
-    memoria.guardar_turno(sid, "¿Rafting?", "En San Gil,\nrío Fonce")  # multilínea
+    memoria.guardar_turno(sid, "¿Rafting?", "En San Gil, río Fonce")
+    memoria.guardar_turno("otra-sesion", "¿Comida?", "Hormigas culonas")
 
+    # El CSV se creó y contiene las 3 filas.
+    assert csv.exists()
+
+    # Filtro por session_id: solo los turnos de esa sesión.
+    sesion = memoria.historial_sesion(sid)
+    assert sesion.shape[0] == 2
     assert memoria.es_recurrente(sid) is True
-    data = memoria.cargar(sid)
-    assert data["ip"] == "1.2.3.4"
-    assert len(data["turnos"]) == 2
 
+    # El contexto incluye la memoria de esa sesión.
     contexto = memoria.construir_contexto(sid)
     assert "Bucaramanga" in contexto and "San Gil" in contexto
 
-    # Otra sesión distinta no comparte memoria.
-    assert memoria.es_recurrente("otra-sesion") is False
+    # Sesiones distintas no comparten memoria.
+    assert memoria.historial_sesion("otra-sesion").shape[0] == 1
+    assert memoria.es_recurrente("no-existe") is False
 
 
-def test_memoria_resume_al_superar_limite(tmp_path):
-    # Límite muy bajo para forzar el resumen; resumidor simulado (sin Gemini).
-    memoria = ConversationMemory(dir_base=tmp_path, max_chars=50, turnos_min=1)
-    sid = "sess-resumen"
-    llamadas = {"n": 0}
+def test_memoria_busqueda_por_termino(tmp_path):
+    memoria = ConversationMemory(ruta_csv=tmp_path / "historial.csv")
+    memoria.guardar_turno("s1", "¿Dónde hago rafting?", "En San Gil, río Fonce")
+    memoria.guardar_turno("s1", "¿Qué comer?", "Hormigas culonas")
 
-    def resumidor_fake(texto, resumen_previo):
-        llamadas["n"] += 1
-        return "RESUMEN"
+    # Búsqueda por término (filtro str.contains, sin distinguir mayúsculas).
+    resultados = memoria.buscar("rafting")
+    assert len(resultados) == 1
+    assert resultados[0]["respuesta"] == "En San Gil, río Fonce"
 
-    for i in range(4):
-        memoria.guardar_turno(sid, f"pregunta {i}", f"respuesta larga numero {i}",
-                              resumidor=resumidor_fake)
+    assert memoria.buscar("SAN GIL")  # case-insensitive
+    assert memoria.buscar("inexistente") == []
 
-    data = memoria.cargar(sid)
-    assert data["resumen"] == "RESUMEN"       # se generó el resumen
-    assert llamadas["n"] >= 1                  # se llamó al resumidor
-    assert len(data["turnos"]) <= 2            # el bloque reciente quedó acotado
+
+def test_memoria_listar_sesiones(tmp_path):
+    memoria = ConversationMemory(ruta_csv=tmp_path / "historial.csv")
+    memoria.guardar_turno("s1", "p1", "r1")
+    memoria.guardar_turno("s1", "p2", "r2")
+    memoria.guardar_turno("s2", "p3", "r3")
+
+    sesiones = {s["session_id"]: s for s in memoria.listar_sesiones()}
+    assert sesiones["s1"]["turnos"] == 2
+    assert sesiones["s2"]["turnos"] == 1

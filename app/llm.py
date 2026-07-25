@@ -88,7 +88,20 @@ def _generar_groq(mensaje: str, system_instruction: str, max_tokens: int, modelo
     return _invocar_cadena(chat, mensaje, system_instruction)
 
 
-_GENERADORES = {"gemini": _generar_gemini, "groq": _generar_groq}
+def _generar_cohere(mensaje: str, system_instruction: str, max_tokens: int, modelo: str) -> str:
+    from langchain_cohere import ChatCohere
+
+    if not settings.cohere_api_key:
+        raise ValueError("Falta COHERE_API_KEY.")
+    chat = ChatCohere(
+        model=modelo,
+        cohere_api_key=settings.cohere_api_key,
+        temperature=0.2,
+    )
+    return _invocar_cadena(chat, mensaje, system_instruction)
+
+
+_GENERADORES = {"gemini": _generar_gemini, "groq": _generar_groq, "cohere": _generar_cohere}
 
 
 # --------------------------------------------------------------------- #
@@ -104,20 +117,24 @@ def _modelos_groq() -> list[str]:
     return modelos
 
 
+def _candidatos(proveedor: str) -> list[tuple[str, str]]:
+    """(proveedor, modelo) disponibles de un proveedor, si tiene su API key."""
+    if proveedor == "groq" and settings.groq_api_key:
+        return [("groq", m) for m in _modelos_groq()]
+    if proveedor == "gemini" and settings.gemini_api_key:
+        return [("gemini", settings.chat_model)]
+    if proveedor == "cohere" and settings.cohere_api_key:
+        return [("cohere", settings.cohere_model)]
+    return []
+
+
 def _cadena_intentos() -> list[tuple[str, str]]:
-    """Lista ordenada de (proveedor, modelo) a intentar según el proveedor activo."""
+    """Cadena de (proveedor, modelo): primero el proveedor activo, luego el resto."""
     prov = settings.llm_provider.lower()
+    orden = [prov] + [p for p in ("groq", "gemini", "cohere") if p != prov]
     cadena: list[tuple[str, str]] = []
-
-    if prov == "groq":
-        cadena += [("groq", m) for m in _modelos_groq()]
-        if settings.gemini_api_key:  # respaldo cruzado
-            cadena.append(("gemini", settings.chat_model))
-    else:  # gemini
-        cadena.append(("gemini", settings.chat_model))
-        if settings.groq_api_key:  # respaldo cruzado
-            cadena += [("groq", m) for m in _modelos_groq()]
-
+    for proveedor in orden:
+        cadena += _candidatos(proveedor)
     return cadena
 
 

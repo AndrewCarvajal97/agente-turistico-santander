@@ -38,6 +38,10 @@ class Settings:
         "GROQ_FALLBACK_MODELS", "llama-3.1-8b-instant,gemma2-9b-it"
     )
 
+    # --- Cohere (fuerte en contexto en español/latinoamericano) ---
+    cohere_api_key: str = _get("COHERE_API_KEY")
+    cohere_model: str = _get("COHERE_MODEL", "command-r-08-2024")
+
     # Documento fuente
     pdf_path: str = _get("PDF_PATH", "data/guia_turistica_santander.pdf")
 
@@ -50,17 +54,25 @@ class Settings:
     admin_key: str = _get("ADMIN_KEY")
 
     def validar(self) -> None:
-        """Lanza un error claro si falta configuración esencial del proveedor activo."""
+        """Lanza un error claro si falta la API key del proveedor activo."""
         prov = self.llm_provider.lower()
-        if prov == "groq" and not self.groq_api_key:
+        claves = {
+            "groq": self.groq_api_key,
+            "gemini": self.gemini_api_key,
+            "cohere": self.cohere_api_key,
+        }
+        urls = {
+            "groq": "https://console.groq.com/keys",
+            "gemini": "https://aistudio.google.com/app/apikey",
+            "cohere": "https://dashboard.cohere.com/api-keys",
+        }
+        if prov not in claves:
             raise ValueError(
-                "Falta GROQ_API_KEY (LLM_PROVIDER=groq). Obtén una gratis en "
-                "https://console.groq.com/keys"
+                f"LLM_PROVIDER inválido: '{self.llm_provider}'. Usa 'groq', 'gemini' o 'cohere'."
             )
-        if prov == "gemini" and not self.gemini_api_key:
+        if not claves[prov]:
             raise ValueError(
-                "Falta GEMINI_API_KEY (LLM_PROVIDER=gemini). Copia .env.example a .env "
-                "y complétalo con tu clave de https://aistudio.google.com/app/apikey"
+                f"Falta la API key para LLM_PROVIDER={prov}. Consíguela en {urls[prov]}"
             )
 
 

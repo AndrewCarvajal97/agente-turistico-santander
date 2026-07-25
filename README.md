@@ -99,7 +99,7 @@ alura-latam/
 | Lenguaje         | Python 3.11+                                  |
 | API web          | FastAPI + Uvicorn                             |
 | Orquestación LLM | **LangChain** (chat models + prompts + LCEL + fallback) |
-| IA / LLM         | **Google Gemini** o **Groq** (Llama/Gemma, open source) — conmutable |
+| IA / LLM         | **Gemini**, **Groq** (Llama/Gemma) o **Cohere** — conmutable, con respaldo |
 | Lectura de PDF   | pypdf                                         |
 | Memoria / datos  | pandas (CSV de sesiones, filtros)             |
 | Nube / Deploy    | Oracle Cloud Infrastructure (OCI Compute)     |

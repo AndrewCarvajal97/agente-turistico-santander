@@ -70,10 +70,14 @@ alura-latam/
 │   ├── llm_client.py    # Cliente de Google Gemini
 │   └── config.py        # Configuración desde variables de entorno
 ├── static/index.html    # Interfaz web de chat
+├── scripts/
+│   └── generar_respuestas.py  # Lote: preguntas.txt -> agente -> CSV (pandas)
 ├── tests/test_agent.py  # Tests unitarios (sin llamar a la API)
 ├── data/
 │   ├── guia_turistica_santander.pdf   # Documento fuente
-│   └── guia_turistica_santander.md    # Versión editable
+│   ├── guia_turistica_santander.md    # Versión editable
+│   ├── preguntas.txt                  # Preguntas para el proceso por lotes
+│   └── respuestas.csv                 # Respuestas generadas (salida del lote)
 ├── docs/                # Diagramas y capturas del deploy
 ├── requirements.txt
 ├── Dockerfile

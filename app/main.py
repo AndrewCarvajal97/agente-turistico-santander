@@ -18,8 +18,10 @@ from pydantic import BaseModel, Field
 
 from .agent import TourismAgent
 from .config import settings
+from .memory import ConversationMemory
 
 agent = TourismAgent()
+memory = ConversationMemory()
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
@@ -72,7 +74,20 @@ def ask(entrada: PreguntaIn) -> RespuestaOut:
         resultado = agent.preguntar(entrada.pregunta)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"Error al generar respuesta: {exc}")
+
+    # Persistimos la conversación (sin romper la respuesta si el guardado falla).
+    try:
+        memory.guardar(entrada.pregunta, resultado["respuesta"], resultado.get("fuente", ""))
+    except Exception as exc:  # noqa: BLE001
+        print(f"[memory] No se pudo guardar la conversación -> {exc}")
+
     return RespuestaOut(**resultado)
+
+
+@app.get("/history")
+def history(limite: int = 20) -> dict:
+    """Devuelve las últimas conversaciones guardadas (memoria)."""
+    return {"total": memory.total(), "conversaciones": memory.leer(limite=limite)}
 
 
 @app.post("/reload")

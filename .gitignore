@@ -13,6 +13,10 @@ __pycache__/
 data/index.npz
 data/*.index
 
+# Historial de conversaciones (datos generados en runtime)
+data/historial_conversaciones.jsonl
+data/*.jsonl
+
 # Sistema operativo / editores
 .DS_Store
 Thumbs.db

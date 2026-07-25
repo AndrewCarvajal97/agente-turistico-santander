@@ -27,6 +27,9 @@ class Settings:
     # Documento fuente
     pdf_path: str = _get("PDF_PATH", "data/guia_turistica_santander.pdf")
 
+    # Memoria de conversaciones (persistencia en archivo)
+    history_path: str = _get("HISTORY_PATH", "data/historial_conversaciones.jsonl")
+
     def validar(self) -> None:
         """Lanza un error claro si falta configuración esencial."""
         if not self.gemini_api_key:

@@ -54,6 +54,9 @@ que el modelo invente información fuera del documento.
 1. **Al iniciar:** se lee el PDF y su texto queda cargado en memoria como contexto.
 2. **Por cada pregunta:** se envía a Gemini el documento + la pregunta, con instrucciones de
    responder únicamente con base en el documento.
+3. **Persistencia:** cada interacción (pregunta + respuesta) se guarda en un archivo JSONL
+   (`data/historial_conversaciones.jsonl`) mediante el servicio `memory.py`, dando al agente
+   una "memoria" de las conversaciones que se puede consultar con el endpoint `GET /history`.
 
 ### Estructura del repositorio
 
@@ -63,6 +66,7 @@ alura-latam/
 │   ├── main.py          # API FastAPI (endpoints + interfaz)
 │   ├── agent.py         # Lógica del agente (carga del PDF + generación con Gemini)
 │   ├── pdf_loader.py    # Lectura y limpieza del texto del PDF
+│   ├── memory.py        # Persistencia de conversaciones en archivo (JSONL)
 │   ├── llm_client.py    # Cliente de Google Gemini
 │   └── config.py        # Configuración desde variables de entorno
 ├── static/index.html    # Interfaz web de chat

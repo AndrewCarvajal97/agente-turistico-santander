@@ -1,0 +1,25 @@
+# Entorno Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Variables de entorno y secretos (NUNCA subir credenciales)
+.env
+*.pem
+oci_api_key.pem
+
+# Credenciales OCI
+.oci/
+config
+
+# Índice vectorial generado
+data/index.npz
+data/*.index
+
+# Sistema operativo / editores
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

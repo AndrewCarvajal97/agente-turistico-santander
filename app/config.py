@@ -46,6 +46,9 @@ class Settings:
     # Cuántos intercambios recientes de la sesión se usan como contexto.
     memory_max_turns: int = int(_get("MEMORY_MAX_TURNS", "6") or 6)
 
+    # Clave de administrador para acciones protegidas (p. ej. análisis de datos).
+    admin_key: str = _get("ADMIN_KEY")
+
     def validar(self) -> None:
         """Lanza un error claro si falta configuración esencial del proveedor activo."""
         prov = self.llm_provider.lower()

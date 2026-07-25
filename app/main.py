@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import llm
+from . import analytics, llm
 from .agent import TourismAgent
 from .config import settings
 from .memory import ConversationMemory
@@ -71,6 +71,10 @@ class RespuestaOut(BaseModel):
     respuesta: str
     fuente: str
     recurrente: bool = False
+
+
+class AdminIn(BaseModel):
+    clave: str = Field(..., description="Clave de administrador")
 
 
 # ------------------------------- Endpoints ------------------------------ #
@@ -137,6 +141,21 @@ def history(session_id: str = "", q: str = "") -> dict:
         return {"session_id": session_id, "turnos": turnos}
     sesiones = memory.listar_sesiones()
     return {"total_sesiones": len(sesiones), "sesiones": sesiones}
+
+
+@app.post("/admin/analisis")
+def admin_analisis(entrada: AdminIn) -> dict:
+    """Acción de administrador: categoriza las preguntas guardadas (pandas + LLM + JSON)."""
+    if not settings.admin_key:
+        raise HTTPException(status_code=503, detail="Análisis no disponible: falta ADMIN_KEY.")
+    if entrada.clave != settings.admin_key:
+        raise HTTPException(status_code=401, detail="Clave de administrador incorrecta.")
+    try:
+        return analytics.analizar(memory)
+    except llm.SinCupoError:
+        raise HTTPException(status_code=503, detail=MSG_SIN_CUPO)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"Error al analizar: {exc}")
 
 
 @app.post("/reload")

@@ -60,6 +60,10 @@ que el modelo invente información fuera del documento.
    `session_id`** (`df[df["session_id"] == sid]`) para recuperar la conversación previa y
    dar continuidad. El endpoint `GET /history` permite listar sesiones, ver una sesión o
    **buscar** un término (`?q=...`, filtro `str.contains`).
+4. **Análisis de conversaciones (admin):** una acción protegida con clave
+   (`POST /admin/analisis`, botón en el frontend) lee el historial con pandas, pide al LLM
+   que **clasifique las preguntas en categorías devolviendo JSON**, lo convierte con
+   `json.loads` y responde qué temas consultan más los usuarios. Aplica pandas + LLM + JSON.
 
 ### Estructura del repositorio
 
@@ -70,6 +74,7 @@ alura-latam/
 │   ├── agent.py         # Lógica del agente (carga del PDF + generación con Gemini)
 │   ├── pdf_loader.py    # Lectura y limpieza del texto del PDF
 │   ├── memory.py        # Memoria de conversaciones en CSV (pandas + filtros)
+│   ├── analytics.py     # Análisis de conversaciones (pandas + LLM + JSON)
 │   ├── llm.py           # Capa multi-proveedor de LLM (Gemini o Groq)
 │   ├── llm_client.py    # Cliente de Google Gemini
 │   └── config.py        # Configuración desde variables de entorno

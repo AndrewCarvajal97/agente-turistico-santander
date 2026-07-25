@@ -131,3 +131,46 @@ def test_llm_sin_cupo_lanza_error(monkeypatch):
     monkeypatch.setitem(llm._GENERADORES, "gemini", siempre_sin_cupo)
     with pytest.raises(llm.SinCupoError):
         llm.generar_texto("hola", "sys", 100)
+
+
+# --------------------- Análisis de conversaciones (admin) ------------------- #
+def test_analytics_categoriza(monkeypatch, tmp_path):
+    from app import analytics
+
+    memoria = ConversationMemory(ruta_csv=tmp_path / "historial.csv")
+    memoria.guardar_turno("s1", "¿Dónde comer?", "...")
+    memoria.guardar_turno("s1", "¿Dónde hago rafting?", "...")
+
+    # LLM simulado que devuelve JSON (como en la clase de JSON).
+    fake = (
+        '[{"pregunta": "¿Dónde comer?", "categoria": "gastronomia"}, '
+        '{"pregunta": "¿Dónde hago rafting?", "categoria": "aventura"}]'
+    )
+    monkeypatch.setattr(analytics.llm, "generar_texto", lambda *a, **k: fake)
+
+    res = analytics.analizar(memoria)
+    assert res["total_preguntas"] == 2
+    cats = {c["categoria"]: c["cantidad"] for c in res["categorias"]}
+    assert cats == {"gastronomia": 1, "aventura": 1}
+
+
+def test_analytics_limpia_json_con_fences(monkeypatch, tmp_path):
+    from app import analytics
+
+    memoria = ConversationMemory(ruta_csv=tmp_path / "historial.csv")
+    memoria.guardar_turno("s1", "¿Qué clima hace?", "...")
+
+    # El modelo a veces envuelve el JSON en ```json ... ```
+    fake = '```json\n[{"pregunta": "¿Qué clima hace?", "categoria": "clima"}]\n```'
+    monkeypatch.setattr(analytics.llm, "generar_texto", lambda *a, **k: fake)
+
+    res = analytics.analizar(memoria)
+    assert res["categorias"] == [{"categoria": "clima", "cantidad": 1}]
+
+
+def test_analytics_sin_datos(tmp_path):
+    from app import analytics
+
+    memoria = ConversationMemory(ruta_csv=tmp_path / "historial.csv")
+    res = analytics.analizar(memoria)
+    assert res["total_preguntas"] == 0 and res["categorias"] == []

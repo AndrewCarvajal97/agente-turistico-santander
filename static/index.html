@@ -56,6 +56,14 @@
       <input id="pregunta" placeholder="Escribe tu pregunta…" autocomplete="off" required />
       <button id="enviar" type="submit">Enviar</button>
     </form>
+
+    <div style="text-align:center;margin-top:16px;">
+      <button id="btnAdmin" type="button"
+              style="background:none;border:none;color:#66788a;font-size:.8rem;
+                     cursor:pointer;text-decoration:underline;">
+        🔐 Análisis de conversaciones (admin)
+      </button>
+    </div>
   </main>
 
   <script>
@@ -130,6 +138,38 @@
     document.getElementById('chips').addEventListener('click', (e) => {
       if (e.target.classList.contains('chip')) preguntar(e.target.textContent);
     });
+
+    // Acción de administrador: análisis de las conversaciones guardadas.
+    async function analisisAdmin() {
+      const clave = prompt('Clave de administrador:');
+      if (!clave) return;
+      const cargando = document.createElement('div');
+      cargando.className = 'msg bot';
+      cargando.innerHTML = '<div class="bubble">🔎 Analizando las conversaciones…</div>';
+      chat.appendChild(cargando);
+      chat.scrollTop = chat.scrollHeight;
+      try {
+        const r = await fetch('/admin/analisis', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ clave })
+        });
+        const data = await r.json();
+        cargando.remove();
+        if (!r.ok) { burbuja('⚠️ ' + (data.detail || 'Error en el análisis.'), 'bot'); return; }
+        let txt = '📊 Análisis de ' + data.total_preguntas + ' pregunta(s):\n';
+        if (!data.categorias || data.categorias.length === 0) {
+          txt += 'Aún no hay conversaciones para analizar.';
+        } else {
+          txt += data.categorias.map(c => '• ' + c.categoria + ': ' + c.cantidad).join('\n');
+        }
+        burbuja(txt, 'bot');
+      } catch (e) {
+        cargando.remove();
+        burbuja('⚠️ No se pudo conectar con el servidor.', 'bot');
+      }
+    }
+    document.getElementById('btnAdmin').addEventListener('click', analisisAdmin);
   </script>
 </body>
 </html>

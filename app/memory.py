@@ -40,6 +40,10 @@ class ConversationMemory:
             return pd.read_csv(self.ruta, dtype=str, keep_default_na=False)
         return pd.DataFrame(columns=COLUMNAS)
 
+    def cargar_df(self) -> pd.DataFrame:
+        """Devuelve todo el historial como DataFrame (para análisis)."""
+        return self._leer_df()
+
     # ------------------------------------------------------------------ #
     # Escritura de un turno
     # ------------------------------------------------------------------ #

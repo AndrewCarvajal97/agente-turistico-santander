@@ -1,24 +1,33 @@
-"""Orquestación del agente RAG.
+"""Orquestación del agente.
 
-Flujo:
-  1. Indexar (una sola vez): PDF -> texto -> chunks -> embeddings -> VectorStore.
-  2. Preguntar: pregunta -> embedding -> recuperar contexto -> prompt -> LLM -> respuesta.
+Estrategia: **inyección de contexto completo**. Como el documento fuente es
+pequeño, en lugar de usar recuperación por embeddings se entrega el texto
+completo del PDF como contexto a Gemini en cada pregunta. Esto es más simple,
+gratuito y preciso para documentos de este tamaño.
+
+Los módulos `chunker` y `vector_store` se conservan como utilidades para escalar
+a corpus grandes (recuperación semántica / RAG clásico).
 """
 from __future__ import annotations
 
-from google.genai import types
+import os
+import time
 
-from .chunker import dividir_en_chunks
+from google.genai import types
+from google.genai import errors as genai_errors
+
 from .config import settings
-from .embeddings import embed_consulta, embed_documentos
 from .llm_client import build_client
 from .pdf_loader import leer_pdf
-from .vector_store import VectorStore
+
+# Códigos HTTP transitorios que conviene reintentar (cuota momentánea, servicio
+# recién habilitado y aún propagándose, indisponibilidad temporal).
+_CODIGOS_REINTENTABLES = {429, 500, 503}
 
 SYSTEM_PROMPT = (
     "Eres un asistente turístico experto en el departamento de Santander, Colombia. "
     "Responde de forma clara, amable y concisa, ÚNICAMENTE con la información del "
-    "contexto proporcionado. Si la respuesta no está en el contexto, indica con "
+    "documento proporcionado. Si la respuesta no está en el documento, indica con "
     "honestidad que no cuentas con esa información en la guía. Responde en español."
 )
 
@@ -27,84 +36,75 @@ class TourismAgent:
     """Agente que responde preguntas sobre la guía turística de Santander."""
 
     def __init__(self) -> None:
-        self.store: VectorStore | None = None
+        self.contexto: str | None = None
+        self.fuente: str = ""
 
     # ------------------------------------------------------------------ #
-    # Indexación
+    # Carga del documento
     # ------------------------------------------------------------------ #
     def indexar(self, pdf_path: str | None = None, forzar: bool = False) -> int:
-        """Construye (o carga) el índice vectorial del documento.
+        """Carga el texto del documento fuente en memoria.
 
         Returns:
-            Número de fragmentos indexados.
+            Número de caracteres cargados del documento.
         """
         ruta_pdf = pdf_path or settings.pdf_path
-
-        if not forzar and VectorStore.existe(settings.index_path):
-            self.store = VectorStore.cargar(settings.index_path)
-            return len(self.store.textos)
-
-        texto = leer_pdf(ruta_pdf)
-        chunks = dividir_en_chunks(
-            texto, tamano=settings.chunk_size, solapamiento=settings.chunk_overlap
-        )
-        vectores = embed_documentos(chunks)
-
-        self.store = VectorStore(chunks, vectores)
-        self.store.guardar(settings.index_path)
-        return len(chunks)
+        self.contexto = leer_pdf(ruta_pdf)
+        self.fuente = os.path.basename(ruta_pdf)
+        return len(self.contexto)
 
     def esta_listo(self) -> bool:
-        return self.store is not None and len(self.store.textos) > 0
+        return bool(self.contexto)
 
     # ------------------------------------------------------------------ #
     # Consulta
     # ------------------------------------------------------------------ #
     def preguntar(self, pregunta: str) -> dict:
-        """Responde una pregunta usando RAG.
+        """Responde una pregunta usando el documento como contexto.
 
         Returns:
-            {"respuesta": str, "fuentes": list[dict]}
+            {"respuesta": str, "fuente": str}
         """
         if not self.esta_listo():
-            raise RuntimeError("El índice no está construido. Llama a indexar() primero.")
+            raise RuntimeError("El documento no está cargado. Llama a indexar() primero.")
 
         pregunta = (pregunta or "").strip()
         if not pregunta:
-            return {"respuesta": "Por favor, escribe una pregunta.", "fuentes": []}
+            return {"respuesta": "Por favor, escribe una pregunta.", "fuente": self.fuente}
 
-        # 1) Recuperar los fragmentos más relevantes.
-        emb = embed_consulta(pregunta)
-        recuperados = self.store.buscar(emb, k=settings.top_k)
-        contexto = "\n\n---\n\n".join(r["texto"] for r in recuperados)
+        respuesta = self._generar(pregunta, self.contexto or "")
+        return {"respuesta": respuesta, "fuente": self.fuente}
 
-        # 2) Construir el prompt y llamar al LLM.
-        respuesta = self._generar(pregunta, contexto)
+    def _generar(self, pregunta: str, contexto: str, intentos: int = 3) -> str:
+        """Llama al modelo de chat de Gemini con el documento como contexto.
 
-        return {
-            "respuesta": respuesta,
-            "fuentes": [
-                {"fragmento": r["texto"][:220] + "…", "score": round(r["score"], 3)}
-                for r in recuperados
-            ],
-        }
-
-    def _generar(self, pregunta: str, contexto: str) -> str:
-        """Llama al modelo de chat de Gemini con el contexto recuperado."""
+        Reintenta ante errores transitorios (cuota momentánea, API recién
+        habilitada y propagándose, o indisponibilidad temporal del servicio).
+        """
         cliente = build_client()
 
         mensaje = (
-            f"### Contexto de la guía:\n{contexto}\n\n"
+            f"### Documento de referencia:\n{contexto}\n\n"
             f"### Pregunta del usuario:\n{pregunta}"
         )
-
-        respuesta = cliente.models.generate_content(
-            model=settings.chat_model,
-            contents=mensaje,
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
-                temperature=0.2,
-                max_output_tokens=800,
-            ),
+        config = types.GenerateContentConfig(
+            system_instruction=SYSTEM_PROMPT,
+            temperature=0.2,
+            max_output_tokens=800,
         )
-        return (respuesta.text or "").strip()
+
+        for intento in range(1, intentos + 1):
+            try:
+                respuesta = cliente.models.generate_content(
+                    model=settings.chat_model, contents=mensaje, config=config
+                )
+                return (respuesta.text or "").strip()
+            except genai_errors.APIError as exc:
+                codigo = getattr(exc, "code", None)
+                # Un 403 en este contexto suele ser la API recién habilitada en un
+                # proyecto nuevo, aún propagándose entre los servidores de Google.
+                es_propagacion = codigo == 403
+                if (codigo in _CODIGOS_REINTENTABLES or es_propagacion) and intento < intentos:
+                    time.sleep(2 * intento)  # backoff simple: 2s, 4s
+                    continue
+                raise

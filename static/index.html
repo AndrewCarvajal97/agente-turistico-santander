@@ -64,16 +64,16 @@
     const input = document.getElementById('pregunta');
     const boton = document.getElementById('enviar');
 
-    function burbuja(texto, clase, fuentes) {
+    function burbuja(texto, clase, fuente) {
       const wrap = document.createElement('div');
       wrap.className = 'msg ' + clase;
       const b = document.createElement('div');
       b.className = 'bubble';
       b.textContent = texto;
-      if (fuentes && fuentes.length) {
+      if (fuente) {
         const f = document.createElement('div');
         f.className = 'fuentes';
-        f.textContent = '📚 Basado en ' + fuentes.length + ' fragmento(s) de la guía.';
+        f.textContent = '📄 Fuente: ' + fuente;
         b.appendChild(f);
       }
       wrap.appendChild(b);
@@ -97,7 +97,7 @@
         });
         const data = await r.json();
         cargando.remove();
-        if (r.ok) burbuja(data.respuesta, 'bot', data.fuentes);
+        if (r.ok) burbuja(data.respuesta, 'bot', data.fuente);
         else burbuja('⚠️ ' + (data.detail || 'Error en el servidor.'), 'bot');
       } catch (e) {
         cargando.remove();

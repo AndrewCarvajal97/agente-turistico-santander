@@ -1,7 +1,6 @@
-"""Tests unitarios que NO requieren conexión a OCI.
+"""Tests unitarios que NO requieren conexión a la API de Gemini.
 
-Validan las piezas locales del pipeline: lectura de PDF, fragmentación y
-búsqueda vectorial (con embeddings simulados).
+Validan las piezas locales: lectura del PDF y la carga del documento en el agente.
 
 Ejecuta con:  py -m pytest -q
 """
@@ -10,9 +9,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.chunker import dividir_en_chunks  # noqa: E402
+from app.agent import TourismAgent  # noqa: E402
 from app.pdf_loader import leer_pdf  # noqa: E402
-from app.vector_store import VectorStore  # noqa: E402
 
 PDF = Path(__file__).resolve().parent.parent / "data" / "guia_turistica_santander.pdf"
 
@@ -23,32 +21,19 @@ def test_lectura_pdf_extrae_texto():
     assert "Santander" in texto
 
 
-def test_chunker_respeta_tamano_y_solapamiento():
-    texto = "Frase de prueba. " * 200
-    chunks = dividir_en_chunks(texto, tamano=300, solapamiento=50)
-    assert len(chunks) > 1
-    assert all(len(c) <= 320 for c in chunks)  # margen por corte natural
+def test_agente_carga_documento():
+    agente = TourismAgent()
+    assert agente.esta_listo() is False
+
+    n = agente.indexar(pdf_path=str(PDF))
+    assert n > 500
+    assert agente.esta_listo() is True
+    assert agente.fuente == "guia_turistica_santander.pdf"
 
 
-def test_chunker_texto_vacio():
-    assert dividir_en_chunks("") == []
-
-
-def test_vector_store_recupera_el_mas_similar():
-    textos = ["rafting en el río Fonce", "gastronomía de Santander", "clima templado"]
-    # Embeddings simulados (3 dimensiones) claramente separados.
-    embeddings = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
-    store = VectorStore(textos, embeddings)
-
-    resultado = store.buscar([0.9, 0.1, 0.0], k=1)
-    assert resultado[0]["texto"] == "rafting en el río Fonce"
-
-
-def test_vector_store_persistencia(tmp_path):
-    store = VectorStore(["a", "b"], [[1, 0], [0, 1]])
-    ruta = tmp_path / "idx.npz"
-    store.guardar(ruta)
-    assert VectorStore.existe(ruta)
-
-    recargado = VectorStore.cargar(ruta)
-    assert recargado.textos == ["a", "b"]
+def test_pregunta_vacia_no_llama_al_modelo():
+    agente = TourismAgent()
+    agente.indexar(pdf_path=str(PDF))
+    # Una pregunta vacía se responde localmente, sin llamar a la API.
+    resultado = agente.preguntar("   ")
+    assert "respuesta" in resultado and "fuente" in resultado

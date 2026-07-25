@@ -3,8 +3,8 @@
 Endpoints:
   GET  /            -> interfaz web mínima (chat)
   GET  /health      -> estado del servicio
-  POST /ask         -> responde una pregunta (RAG)
-  POST /reindex     -> reconstruye el índice desde el PDF
+  POST /ask         -> responde una pregunta usando el documento como contexto
+  POST /reload      -> recarga el documento fuente
 """
 from __future__ import annotations
 
@@ -26,20 +26,20 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Construye o carga el índice al iniciar el servidor."""
+    """Carga el documento fuente al iniciar el servidor."""
     try:
         settings.validar()
         n = agent.indexar()
-        print(f"[startup] Índice listo con {n} fragmentos.")
+        print(f"[startup] Documento cargado ({n} caracteres).")
     except Exception as exc:  # noqa: BLE001 - se registra para diagnóstico
-        print(f"[startup] Advertencia: no se pudo indexar al inicio -> {exc}")
+        print(f"[startup] Advertencia: no se pudo cargar el documento -> {exc}")
     yield
 
 
 app = FastAPI(
     title="Agente Turístico de Santander",
-    description="Agente IA (RAG) que responde preguntas sobre turismo en Santander, "
-    "Colombia, usando Google Gemini.",
+    description="Agente IA que responde preguntas sobre turismo en Santander, "
+    "Colombia, usando Google Gemini con el documento como contexto.",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -50,20 +50,15 @@ class PreguntaIn(BaseModel):
     pregunta: str = Field(..., min_length=1, examples=["¿Dónde puedo practicar rafting?"])
 
 
-class FuenteOut(BaseModel):
-    fragmento: str
-    score: float
-
-
 class RespuestaOut(BaseModel):
     respuesta: str
-    fuentes: list[FuenteOut]
+    fuente: str
 
 
 # ------------------------------- Endpoints ------------------------------ #
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok", "indice_listo": agent.esta_listo()}
+    return {"status": "ok", "documento_cargado": agent.esta_listo()}
 
 
 @app.post("/ask", response_model=RespuestaOut)
@@ -71,7 +66,7 @@ def ask(entrada: PreguntaIn) -> RespuestaOut:
     if not agent.esta_listo():
         raise HTTPException(
             status_code=503,
-            detail="El índice no está listo. Verifica tu GEMINI_API_KEY y usa /reindex.",
+            detail="El documento no está cargado. Verifica tu GEMINI_API_KEY y usa /reload.",
         )
     try:
         resultado = agent.preguntar(entrada.pregunta)
@@ -80,13 +75,13 @@ def ask(entrada: PreguntaIn) -> RespuestaOut:
     return RespuestaOut(**resultado)
 
 
-@app.post("/reindex")
-def reindex() -> dict:
+@app.post("/reload")
+def reload() -> dict:
     try:
         n = agent.indexar(forzar=True)
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=500, detail=f"Error al indexar: {exc}")
-    return {"status": "ok", "fragmentos": n}
+        raise HTTPException(status_code=500, detail=f"Error al cargar el documento: {exc}")
+    return {"status": "ok", "caracteres": n}
 
 
 @app.get("/")

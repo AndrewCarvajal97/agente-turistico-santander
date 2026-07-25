@@ -2,9 +2,8 @@
 
 Agente de inteligencia artificial que responde preguntas sobre los **sitios turísticos
 del departamento de Santander, Colombia**, a partir del contenido de un documento PDF.
-Utiliza la técnica **RAG (Retrieval-Augmented Generation)** con **Google Gemini**
-(chat + embeddings), está expuesto mediante una **API con FastAPI** con interfaz web de
-chat, y se despliega en **Oracle Cloud Infrastructure (OCI Compute)**.
+Usa **Google Gemini** como modelo de lenguaje, está expuesto mediante una **API con FastAPI**
+con una interfaz web de chat, y se despliega en **Oracle Cloud Infrastructure (OCI Compute)**.
 
 > Proyecto desarrollado para el **Challenge Alura Agente**.
 
@@ -12,51 +11,49 @@ chat, y se despliega en **Oracle Cloud Infrastructure (OCI Compute)**.
 
 ## 📖 Descripción general
 
-El agente permite a un usuario hacer preguntas en lenguaje natural (por ejemplo,
-*"¿dónde puedo practicar rafting?"*) y obtener respuestas fundamentadas exclusivamente en
-una guía turística en formato PDF. En lugar de enviar el documento completo al modelo en
-cada pregunta, el sistema:
+El agente permite hacer preguntas en lenguaje natural (por ejemplo, *"¿dónde puedo practicar
+rafting?"*) y obtener respuestas fundamentadas exclusivamente en una guía turística en formato
+PDF, sin necesidad de abrir el documento.
 
-1. **Indexa** el PDF una sola vez (lo divide en fragmentos y genera *embeddings*).
-2. En cada consulta, **recupera** los fragmentos más relevantes por similitud semántica.
-3. **Genera** la respuesta con un modelo de lenguaje (LLM), usando solo ese contexto.
-
-Esto hace las respuestas más precisas, económicas y libres de alucinaciones.
+**Estrategia: inyección de contexto completo.** Como el documento fuente es pequeño (una guía
+de 5 páginas), el agente entrega el **texto completo del PDF como contexto** al modelo en cada
+pregunta. Aprovechando la amplia ventana de contexto de Gemini, esto resulta más simple,
+preciso y económico que un pipeline de embeddings para un documento de este tamaño, y evita
+que el modelo invente información fuera del documento.
 
 ---
 
 ## 🏗️ Arquitectura de la solución
 
 ```
-                         ┌──────────────────────────────┐
-   Usuario  ──HTTP──▶    │        FastAPI (app)         │
- (navegador / API)       │                              │
-                         │   GET  /        (chat web)   │
-                         │   POST /ask     (pregunta)   │
-                         │   POST /reindex              │
-                         │   GET  /health               │
-                         └───────────────┬──────────────┘
-                                         │
-        ┌────────────────────────────────┼───────────────────────────────┐
-        │                                 │                               │
-        ▼ (indexación, 1 vez)             ▼ (por pregunta)                │
- ┌─────────────┐   ┌──────────┐    ┌────────────────┐   ┌──────────────┐   │
- │  PDF Loader │──▶│ Chunker  │──▶ │   Embeddings   │──▶│ Vector Store │◀──┘
- │  (pypdf)    │   │ (overlap)│    │ (Gemini embed) │   │ (NumPy/coseno)│
- └─────────────┘   └──────────┘    └────────────────┘   └──────┬───────┘
-                                                              │ top-k
-                                                              ▼
-                                                    ┌──────────────────┐
-                                                    │  Google Gemini   │
-                                                    │    LLM (chat)    │
-                                                    └────────┬─────────┘
-                                                             ▼
-                                                     Respuesta + fuentes
+                       ┌──────────────────────────────┐
+   Usuario  ──HTTP──▶  │        FastAPI (app)         │
+ (navegador / API)     │                              │
+                       │   GET  /        (chat web)   │
+                       │   POST /ask     (pregunta)   │
+                       │   GET  /health               │
+                       └───────────────┬──────────────┘
+                                       │
+              ┌────────────────────────┼─────────────────────────┐
+              ▼ (al iniciar, 1 vez)    ▼ (por cada pregunta)      │
+      ┌───────────────┐        ┌────────────────────┐            │
+      │  PDF Loader   │───────▶│  Documento en      │            │
+      │  (pypdf)      │ texto  │  memoria (contexto)│◀───────────┘
+      └───────────────┘        └─────────┬──────────┘
+                                         │ contexto + pregunta
+                                         ▼
+                               ┌────────────────────┐
+                               │   Google Gemini    │
+                               │   (gemini-flash)   │
+                               └─────────┬──────────┘
+                                         ▼
+                                Respuesta en lenguaje natural
 ```
 
-**Flujo RAG:**
-- **Indexación:** `pdf_loader` → `chunker` → `embeddings` → `vector_store` (se guarda en `data/index.npz`).
-- **Consulta:** pregunta → *embedding* → búsqueda por coseno → contexto → LLM → respuesta.
+**Flujo:**
+1. **Al iniciar:** se lee el PDF y su texto queda cargado en memoria como contexto.
+2. **Por cada pregunta:** se envía a Gemini el documento + la pregunta, con instrucciones de
+   responder únicamente con base en el documento.
 
 ### Estructura del repositorio
 
@@ -64,16 +61,12 @@ Esto hace las respuestas más precisas, económicas y libres de alucinaciones.
 alura-latam/
 ├── app/
 │   ├── main.py          # API FastAPI (endpoints + interfaz)
-│   ├── agent.py         # Orquestación del RAG (indexar / preguntar)
-│   ├── pdf_loader.py    # Lectura y limpieza del PDF
-│   ├── chunker.py       # Fragmentación con solapamiento
-│   ├── embeddings.py    # Embeddings con OCI Generative AI
-│   ├── vector_store.py  # Índice vectorial NumPy (similitud del coseno)
+│   ├── agent.py         # Lógica del agente (carga del PDF + generación con Gemini)
+│   ├── pdf_loader.py    # Lectura y limpieza del texto del PDF
 │   ├── llm_client.py    # Cliente de Google Gemini
 │   └── config.py        # Configuración desde variables de entorno
 ├── static/index.html    # Interfaz web de chat
-├── scripts/build_index.py  # Construye el índice por CLI
-├── tests/test_agent.py  # Tests unitarios (sin OCI)
+├── tests/test_agent.py  # Tests unitarios (sin llamar a la API)
 ├── data/
 │   ├── guia_turistica_santander.pdf   # Documento fuente
 │   └── guia_turistica_santander.md    # Versión editable
@@ -88,17 +81,15 @@ alura-latam/
 
 ## 🛠️ Tecnologías y herramientas
 
-| Categoría          | Herramienta                                   |
-|--------------------|-----------------------------------------------|
-| Lenguaje           | Python 3.11+                                  |
-| API web            | FastAPI + Uvicorn                             |
-| IA / LLM           | Google Gemini — `gemini-2.0-flash`            |
-| Embeddings         | Google Gemini — `text-embedding-004`          |
-| Búsqueda vectorial | NumPy (similitud del coseno)                  |
-| Lectura de PDF     | pypdf                                         |
-| Nube / Deploy      | Oracle Cloud Infrastructure (OCI Compute)     |
-| Frontend           | HTML + CSS + JavaScript (vanilla)             |
-| Testing            | pytest                                        |
+| Categoría        | Herramienta                                   |
+|------------------|-----------------------------------------------|
+| Lenguaje         | Python 3.11+                                  |
+| API web          | FastAPI + Uvicorn                             |
+| IA / LLM         | Google Gemini — `gemini-flash-latest`         |
+| Lectura de PDF   | pypdf                                         |
+| Nube / Deploy    | Oracle Cloud Infrastructure (OCI Compute)     |
+| Frontend         | HTML + CSS + JavaScript (vanilla)             |
+| Testing          | pytest                                        |
 
 ---
 
@@ -106,14 +97,13 @@ alura-latam/
 
 ### 1. Requisitos previos
 - Python 3.11 o superior.
-- Una **API key de Google Gemini** (gratuita), que se obtiene en
+- Una **API key de Google Gemini** (gratuita, nivel *free tier*), que se obtiene en
   [Google AI Studio](https://aistudio.google.com/app/apikey).
-- (Para el deploy) una cuenta de **Oracle Cloud (OCI)** con acceso a **Compute**.
 
 ### 2. Clonar e instalar dependencias
 ```bash
-git clone https://github.com/<tu-usuario>/<tu-repo>.git
-cd <tu-repo>
+git clone https://github.com/AndrewCarvajal97/agente-turistico-santander.git
+cd agente-turistico-santander
 python -m venv venv
 # Windows:
 venv\Scripts\activate
@@ -122,26 +112,23 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 3. Configurar variables de entorno
+### 3. Configurar la variable de entorno
 ```bash
 cp .env.example .env
 ```
-Edita `.env` y completa:
-- `GEMINI_API_KEY` — tu clave de [Google AI Studio](https://aistudio.google.com/app/apikey).
-
-### 4. Construir el índice del documento
-```bash
-python scripts/build_index.py
+Edita `.env` y coloca tu clave:
+```
+GEMINI_API_KEY=AIza...tu_clave...
 ```
 
-### 5. Levantar la aplicación
+### 4. Levantar la aplicación
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
-Abre tu navegador en **http://localhost:8000** para usar el chat, o consulta la documentación
-interactiva de la API en **http://localhost:8000/docs**.
+Abre **http://localhost:8000** para usar el chat, o **http://localhost:8000/docs** para la
+documentación interactiva de la API.
 
-### 6. (Opcional) Ejecutar los tests
+### 5. (Opcional) Ejecutar los tests
 ```bash
 python -m pytest -q
 ```
@@ -157,12 +144,11 @@ servidor. Pasos resumidos:
 1. Crear la VM (Ubuntu 22.04) y abrir el puerto `8000` en la *Security List* / *NSG*.
 2. Conectarse por SSH y preparar el entorno:
    ```bash
-   git clone https://github.com/<tu-usuario>/<tu-repo>.git
-   cd <tu-repo>
+   git clone https://github.com/AndrewCarvajal97/agente-turistico-santander.git
+   cd agente-turistico-santander
    python3 -m venv venv && source venv/bin/activate
    pip install -r requirements.txt
    cp .env.example .env          # edita .env y coloca tu GEMINI_API_KEY
-   python scripts/build_index.py
    uvicorn app.main:app --host 0.0.0.0 --port 8000
    ```
 3. (Opcional) Contenerizar con el `Dockerfile` incluido y correr con Docker.
@@ -181,25 +167,26 @@ servidor. Pasos resumidos:
 - ¿Qué comida típica debo probar en Santander?
 - ¿Cuánto se tarda de Bucaramanga a San Gil?
 - ¿Cuál es la mejor época para visitar?
-- ¿Qué deportes extremos puedo practicar?
 
 ## 🗨️ Ejemplos de respuestas generadas
 
+> **Pregunta:** ¿Cuál es la capital de Santander?
+>
+> **Respuesta:** La capital de Santander es **Bucaramanga**, conocida como "La Ciudad Bonita"
+> y "La Ciudad de los Parques".
+
 > **Pregunta:** ¿Dónde puedo practicar rafting?
 >
-> **Respuesta:** Puedes practicar rafting en **San Gil**, considerada la capital del turismo
-> de aventura de Colombia. El **río Fonce** es ideal para principiantes (grado II-III),
-> mientras que el **río Suárez** ofrece un nivel avanzado (grado IV-V) para personas con
-> experiencia.
+> **Respuesta:** Puedes practicar rafting en **San Gil**. El **río Fonce** es ideal para
+> principiantes (nivel II-III) y el **río Suárez** para personas con experiencia (nivel IV-V).
 
 > **Pregunta:** ¿Por qué Barichara es tan famosa?
 >
-> **Respuesta:** Barichara es considerada *"el pueblo más lindo de Colombia"*. Es un
-> **Monumento Nacional** reconocido por su arquitectura colonial: calles empedradas, casas
-> blancas de tapia pisada y techos de teja de barro. Desde allí parte el **Camino Real**, un
-> sendero histórico de unos 5,3 km que conecta con el pueblo de Guane.
+> **Respuesta:** Barichara es considerada *"el pueblo más lindo de Colombia"* y está declarada
+> Monumento Nacional. Destaca por su arquitectura colonial: calles empedradas y casas blancas
+> de tapia pisada.
 
-_(Las respuestas se generan dinámicamente con OCI Generative AI a partir del PDF fuente.)_
+_(Las respuestas se generan dinámicamente con Google Gemini a partir del PDF fuente.)_
 
 ---
 
@@ -208,6 +195,13 @@ _(Las respuestas se generan dinámicamente con OCI Generative AI a partir del PD
 El agente responde a partir de [`data/guia_turistica_santander.pdf`](data/guia_turistica_santander.pdf),
 una guía turística de 5 páginas que cubre destinos, deportes de aventura, gastronomía,
 transporte, mejor época para visitar y preguntas frecuentes de Santander, Colombia.
+
+---
+
+## 🗺️ Roadmap / próximos pasos
+
+- Migrar a un pipeline **RAG con LangChain** (embeddings + base vectorial) para escalar a
+  documentos más grandes o a múltiples fuentes.
 
 ---
 

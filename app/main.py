@@ -9,18 +9,22 @@ Endpoints:
 """
 from __future__ import annotations
 
+import base64
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import analytics, llm
+from . import analytics, llm, vision
 from .agent import TourismAgent
 from .config import settings
 from .memory import ConversationMemory
+
+# Tamaño máximo de imagen aceptado en /vision (5 MB).
+_MAX_IMAGEN = 5 * 1024 * 1024
 
 agent = TourismAgent()
 memory = ConversationMemory()
@@ -124,6 +128,32 @@ def ask(entrada: PreguntaIn, request: Request) -> RespuestaOut:
     return RespuestaOut(
         respuesta=resultado["respuesta"], fuente=resultado["fuente"], recurrente=recurrente
     )
+
+
+@app.post("/vision")
+async def vision_endpoint(file: UploadFile = File(...), pregunta: str = Form("")) -> dict:
+    """Analiza una imagen con Gemini visión (identifica lugares/platos de Santander)."""
+    if not settings.gemini_api_key:
+        raise HTTPException(
+            status_code=503, detail="Análisis de imágenes no disponible: falta GEMINI_API_KEY."
+        )
+    if not (file.content_type or "").startswith("image/"):
+        raise HTTPException(status_code=400, detail="El archivo debe ser una imagen.")
+
+    datos = await file.read()
+    if len(datos) > _MAX_IMAGEN:
+        raise HTTPException(status_code=413, detail="La imagen supera el tamaño máximo (5 MB).")
+
+    try:
+        b64 = base64.b64encode(datos).decode("utf-8")
+        descripcion = vision.analizar_imagen(b64, file.content_type, pregunta)
+    except Exception as exc:  # noqa: BLE001 - degradación amable (visión solo en Gemini)
+        print(f"[vision] error -> {exc}")
+        descripcion = (
+            "No pude analizar la imagen en este momento (la visión usa Gemini y quizá "
+            "se alcanzó su límite). Intenta de nuevo en un rato. 🙏"
+        )
+    return {"descripcion": descripcion}
 
 
 @app.get("/history")

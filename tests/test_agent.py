@@ -174,3 +174,18 @@ def test_analytics_sin_datos(tmp_path):
     memoria = ConversationMemory(ruta_csv=tmp_path / "historial.csv")
     res = analytics.analizar(memoria)
     assert res["total_preguntas"] == 0 and res["categorias"] == []
+
+
+# ------------------------------ Visión (imágenes) --------------------------- #
+def test_encode_image(tmp_path):
+    import base64
+
+    from app import vision
+
+    ruta = tmp_path / "img.bin"
+    contenido = b"\x89PNG\r\n\x1a\n datos de prueba"
+    ruta.write_bytes(contenido)
+
+    b64 = vision.encode_image(ruta)
+    # Lo codificado debe decodificar de vuelta al contenido original.
+    assert base64.b64decode(b64) == contenido

@@ -52,6 +52,11 @@
       <span class="chip">¿Qué comida típica debo probar?</span>
     </div>
 
+    <div style="text-align:center;margin:10px 0;">
+      <button id="btnImg" type="button" class="chip">📷 Identificar lugar/plato por foto</button>
+      <input type="file" id="imgInput" accept="image/*" style="display:none;" />
+    </div>
+
     <form id="form">
       <input id="pregunta" placeholder="Escribe tu pregunta…" autocomplete="off" required />
       <button id="enviar" type="submit">Enviar</button>
@@ -170,6 +175,34 @@
       }
     }
     document.getElementById('btnAdmin').addEventListener('click', analisisAdmin);
+
+    // Análisis de imagen (visión): subir una foto y describirla con Gemini.
+    const imgInput = document.getElementById('imgInput');
+    document.getElementById('btnImg').addEventListener('click', () => imgInput.click());
+    imgInput.addEventListener('change', async () => {
+      const archivo = imgInput.files[0];
+      if (!archivo) return;
+      burbuja('📷 Envié una imagen para identificar…', 'user');
+      const cargando = document.createElement('div');
+      cargando.className = 'msg bot';
+      cargando.innerHTML = '<div class="bubble">🔎 Analizando la imagen…</div>';
+      chat.appendChild(cargando);
+      chat.scrollTop = chat.scrollHeight;
+      const datos = new FormData();
+      datos.append('file', archivo);
+      datos.append('pregunta', '');
+      try {
+        const r = await fetch('/vision', { method: 'POST', body: datos });
+        const data = await r.json();
+        cargando.remove();
+        if (r.ok) burbuja(data.descripcion, 'bot');
+        else burbuja('⚠️ ' + (data.detail || 'Error al analizar la imagen.'), 'bot');
+      } catch (e) {
+        cargando.remove();
+        burbuja('⚠️ No se pudo conectar con el servidor.', 'bot');
+      }
+      imgInput.value = '';
+    });
   </script>
 </body>
 </html>

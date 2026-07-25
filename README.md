@@ -64,6 +64,10 @@ que el modelo invente información fuera del documento.
    (`POST /admin/analisis`, botón en el frontend) lee el historial con pandas, pide al LLM
    que **clasifique las preguntas en categorías devolviendo JSON**, lo convierte con
    `json.loads` y responde qué temas consultan más los usuarios. Aplica pandas + LLM + JSON.
+5. **Análisis de imágenes (visión):** el usuario sube una foto (`POST /vision`, botón en el
+   frontend); se codifica en base64 y se envía a **Gemini visión** (mensaje multimodal con
+   LangChain) para identificar lugares, platos o actividades de Santander. La visión solo
+   funciona con Gemini (Groq/Cohere son de texto).
 
 ### Estructura del repositorio
 
@@ -75,7 +79,8 @@ alura-latam/
 │   ├── pdf_loader.py    # Lectura y limpieza del texto del PDF
 │   ├── memory.py        # Memoria de conversaciones en CSV (pandas + filtros)
 │   ├── analytics.py     # Análisis de conversaciones (pandas + LLM + JSON)
-│   ├── llm.py           # Capa LLM con LangChain (Gemini o Groq + fallback)
+│   ├── vision.py        # Análisis de imágenes con Gemini visión (multimodal)
+│   ├── llm.py           # Capa LLM con LangChain (Gemini/Groq/Cohere + fallback)
 │   └── config.py        # Configuración desde variables de entorno
 ├── static/index.html    # Interfaz web de chat
 ├── tests/test_agent.py  # Tests unitarios (sin llamar a la API)

@@ -32,6 +32,11 @@ class Settings:
     # --- Groq (modelos open source: Llama, Gemma) ---
     groq_api_key: str = _get("GROQ_API_KEY")
     groq_model: str = _get("GROQ_MODEL", "llama-3.3-70b-versatile")
+    # Modelos de respaldo de Groq (cada uno con su cuota diaria propia). Si el
+    # modelo principal se queda sin cupo, se intenta con estos, en orden.
+    groq_fallback_models: str = _get(
+        "GROQ_FALLBACK_MODELS", "llama-3.1-8b-instant,gemma2-9b-it"
+    )
 
     # Documento fuente
     pdf_path: str = _get("PDF_PATH", "data/guia_turistica_santander.pdf")

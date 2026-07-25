@@ -17,12 +17,23 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from . import llm
 from .agent import TourismAgent
 from .config import settings
 from .memory import ConversationMemory
 
 agent = TourismAgent()
 memory = ConversationMemory()
+
+# Mensajes amables ante fallos, para que el usuario nunca vea un crash.
+MSG_SIN_CUPO = (
+    "Estoy recibiendo muchas consultas en este momento y alcancé el límite temporal "
+    "del servicio de IA. 😅 Por favor, intenta de nuevo en unos segundos."
+)
+MSG_ERROR = (
+    "Ups, tuve un problema para generar la respuesta. Por favor, intenta de nuevo "
+    "en un momento. 🙏"
+)
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
@@ -83,20 +94,32 @@ def ask(entrada: PreguntaIn, request: Request) -> RespuestaOut:
     recurrente = memory.es_recurrente(session_id) if session_id else False
     contexto_conv = memory.construir_contexto(session_id) if session_id else ""
 
+    # Manejo de errores (patrón try/except con casos distintos):
+    #  - SinCupoError: todos los proveedores/modelos agotaron su cuota.
+    #  - Cualquier otro error inesperado.
+    # En ambos casos respondemos con un mensaje amable en vez de romper la app.
+    ok = True
     try:
         resultado = agent.preguntar(entrada.pregunta, contexto_conversacion=contexto_conv)
+    except llm.SinCupoError as exc:
+        print(f"[ask] sin cupo en todos los proveedores -> {exc}")
+        resultado = {"respuesta": MSG_SIN_CUPO, "fuente": agent.fuente}
+        ok = False
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=500, detail=f"Error al generar respuesta: {exc}")
+        print(f"[ask] error inesperado -> {exc}")
+        resultado = {"respuesta": MSG_ERROR, "fuente": agent.fuente}
+        ok = False
 
-    # Persistimos el intercambio en el CSV de memoria. No rompe la respuesta si
-    # el guardado falla.
-    if session_id:
+    # Guardamos en la memoria solo las respuestas reales (no los mensajes de error).
+    if session_id and ok:
         try:
             memory.guardar_turno(session_id, entrada.pregunta, resultado["respuesta"], ip=ip)
         except Exception as exc:  # noqa: BLE001
             print(f"[memory] No se pudo guardar la conversación -> {exc}")
 
-    return RespuestaOut(**resultado, recurrente=recurrente)
+    return RespuestaOut(
+        respuesta=resultado["respuesta"], fuente=resultado["fuente"], recurrente=recurrente
+    )
 
 
 @app.get("/history")

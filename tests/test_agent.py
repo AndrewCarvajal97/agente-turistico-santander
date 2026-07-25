@@ -7,8 +7,11 @@ Ejecuta con:  py -m pytest -q
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from app import llm  # noqa: E402
 from app.agent import TourismAgent  # noqa: E402
 from app.memory import ConversationMemory  # noqa: E402
 from app.pdf_loader import leer_pdf  # noqa: E402
@@ -90,3 +93,41 @@ def test_memoria_listar_sesiones(tmp_path):
     sesiones = {s["session_id"]: s for s in memoria.listar_sesiones()}
     assert sesiones["s1"]["turnos"] == 2
     assert sesiones["s2"]["turnos"] == 1
+
+
+# ---------------------- Estrategia de respaldo del LLM ---------------------- #
+def _error_429() -> Exception:
+    exc = Exception("cuota agotada")
+    exc.status_code = 429  # type: ignore[attr-defined]
+    return exc
+
+
+def test_llm_devuelve_primer_exito(monkeypatch):
+    monkeypatch.setitem(llm._GENERADORES, "groq", lambda *a, **k: "RESPUESTA")
+    monkeypatch.setitem(llm._GENERADORES, "gemini", lambda *a, **k: "RESPUESTA")
+    assert llm.generar_texto("hola", "sys", 100) == "RESPUESTA"
+
+
+def test_llm_pasa_al_siguiente_si_no_hay_cupo(monkeypatch):
+    estado = {"n": 0}
+
+    def generador(mensaje, system, max_tokens, modelo):
+        estado["n"] += 1
+        if estado["n"] == 1:  # el primer candidato se queda sin cupo
+            raise _error_429()
+        return "OK-RESPALDO"
+
+    monkeypatch.setitem(llm._GENERADORES, "groq", generador)
+    monkeypatch.setitem(llm._GENERADORES, "gemini", generador)
+    assert llm.generar_texto("hola", "sys", 100) == "OK-RESPALDO"
+    assert estado["n"] >= 2  # usó el respaldo
+
+
+def test_llm_sin_cupo_lanza_error(monkeypatch):
+    def siempre_sin_cupo(*a, **k):
+        raise _error_429()
+
+    monkeypatch.setitem(llm._GENERADORES, "groq", siempre_sin_cupo)
+    monkeypatch.setitem(llm._GENERADORES, "gemini", siempre_sin_cupo)
+    with pytest.raises(llm.SinCupoError):
+        llm.generar_texto("hola", "sys", 100)

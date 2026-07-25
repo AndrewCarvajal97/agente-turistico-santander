@@ -30,8 +30,14 @@ def encode_image(ruta: str | Path) -> str:
 
 
 def analizar_imagen(imagen_b64: str, mime: str = "image/jpeg", pregunta: str = "") -> str:
-    """Envía una imagen (base64) a Gemini visión y devuelve su descripción."""
-    from langchain_core.messages import HumanMessage, SystemMessage
+    """Envía una imagen (base64) a Gemini visión y devuelve su descripción.
+
+    Usa una plantilla multimodal (`ChatPromptTemplate`) donde la imagen y la
+    pregunta son variables, y una cadena LCEL con `StrOutputParser` para asegurar
+    que la salida sea siempre un string (más robusto y fácil de integrar).
+    """
+    from langchain_core.output_parsers import StrOutputParser
+    from langchain_core.prompts import ChatPromptTemplate
     from langchain_google_genai import ChatGoogleGenerativeAI
 
     if not settings.gemini_api_key:
@@ -47,24 +53,23 @@ def analizar_imagen(imagen_b64: str, mime: str = "image/jpeg", pregunta: str = "
         "¿Qué muestra esta imagen? Si es un lugar, plato o actividad de Santander, "
         "identifícalo."
     )
-    mensaje = HumanMessage(
-        content=[
-            {"type": "text", "text": texto},
-            {"type": "image_url", "image_url": f"data:{mime};base64,{imagen_b64}"},
+
+    # El data-URI completo va como una sola variable ({imagen}): LangChain solo
+    # permite una variable de formato por plantilla de imagen.
+    template_analisis = ChatPromptTemplate.from_messages(
+        [
+            ("system", SYSTEM_VISION),
+            (
+                "user",
+                [
+                    {"type": "text", "text": "{pregunta}"},
+                    {"type": "image_url", "image_url": "{imagen}"},
+                ],
+            ),
         ]
     )
-    respuesta = chat.invoke([SystemMessage(content=SYSTEM_VISION), mensaje])
-    return _extraer_texto(respuesta.content)
-
-
-def _extraer_texto(contenido) -> str:
-    """Extrae el texto de la respuesta, que puede venir como str o lista de bloques."""
-    if isinstance(contenido, str):
-        return contenido.strip()
-    if isinstance(contenido, list):
-        partes = [
-            bloque.get("text", "") if isinstance(bloque, dict) else str(bloque)
-            for bloque in contenido
-        ]
-        return "".join(partes).strip()
-    return str(contenido or "").strip()
+    cadena_analisis = template_analisis | chat | StrOutputParser()
+    salida = cadena_analisis.invoke(
+        {"pregunta": texto, "imagen": f"data:{mime};base64,{imagen_b64}"}
+    )
+    return salida.strip()

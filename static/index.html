@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agente Turístico de Santander</title>
+  <style>
+    :root { --navy:#0B3D5C; --teal:#0E7C7B; --bg:#f4f6f8; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+           background: var(--bg); color:#1b2733; }
+    header { background: linear-gradient(135deg, var(--navy), var(--teal));
+             color:#fff; padding: 22px 20px; text-align:center; }
+    header h1 { margin:0; font-size:1.4rem; }
+    header p { margin:6px 0 0; opacity:.9; font-size:.9rem; }
+    main { max-width: 760px; margin: 0 auto; padding: 20px; }
+    #chat { background:#fff; border-radius:12px; padding:16px; min-height:320px;
+            box-shadow: 0 2px 10px rgba(0,0,0,.06); }
+    .msg { margin:10px 0; display:flex; }
+    .msg .bubble { padding:10px 14px; border-radius:14px; max-width:80%;
+                   line-height:1.45; white-space:pre-wrap; }
+    .user { justify-content:flex-end; }
+    .user .bubble { background: var(--navy); color:#fff; border-bottom-right-radius:4px; }
+    .bot .bubble  { background:#eef2f5; color:#1b2733; border-bottom-left-radius:4px; }
+    .fuentes { font-size:.72rem; color:#66788a; margin-top:6px; }
+    form { display:flex; gap:8px; margin-top:14px; }
+    input { flex:1; padding:12px 14px; border:1px solid #cfd8e0; border-radius:10px;
+            font-size:1rem; }
+    button { background: var(--teal); color:#fff; border:none; padding:12px 20px;
+             border-radius:10px; font-size:1rem; cursor:pointer; }
+    button:disabled { opacity:.5; cursor:not-allowed; }
+    .chips { margin:12px 0 0; display:flex; flex-wrap:wrap; gap:8px; }
+    .chip { background:#fff; border:1px solid #cfd8e0; border-radius:20px;
+            padding:6px 12px; font-size:.82rem; cursor:pointer; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🏔️ Agente Turístico de Santander</h1>
+    <p>Pregúntame sobre destinos, aventura y gastronomía de Santander, Colombia</p>
+  </header>
+  <main>
+    <div id="chat">
+      <div class="msg bot"><div class="bubble">¡Hola! 👋 Soy tu guía de Santander.
+      Pregúntame lo que quieras sobre sus sitios turísticos.</div></div>
+    </div>
+
+    <div class="chips" id="chips">
+      <span class="chip">¿Cuál es la capital de Santander?</span>
+      <span class="chip">¿Dónde puedo practicar rafting?</span>
+      <span class="chip">¿Por qué Barichara es famosa?</span>
+      <span class="chip">¿Qué comida típica debo probar?</span>
+    </div>
+
+    <form id="form">
+      <input id="pregunta" placeholder="Escribe tu pregunta…" autocomplete="off" required />
+      <button id="enviar" type="submit">Enviar</button>
+    </form>
+  </main>
+
+  <script>
+    const chat = document.getElementById('chat');
+    const form = document.getElementById('form');
+    const input = document.getElementById('pregunta');
+    const boton = document.getElementById('enviar');
+
+    function burbuja(texto, clase, fuentes) {
+      const wrap = document.createElement('div');
+      wrap.className = 'msg ' + clase;
+      const b = document.createElement('div');
+      b.className = 'bubble';
+      b.textContent = texto;
+      if (fuentes && fuentes.length) {
+        const f = document.createElement('div');
+        f.className = 'fuentes';
+        f.textContent = '📚 Basado en ' + fuentes.length + ' fragmento(s) de la guía.';
+        b.appendChild(f);
+      }
+      wrap.appendChild(b);
+      chat.appendChild(wrap);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    async function preguntar(texto) {
+      burbuja(texto, 'user');
+      input.value = '';
+      boton.disabled = true;
+      const cargando = document.createElement('div');
+      cargando.className = 'msg bot';
+      cargando.innerHTML = '<div class="bubble">Escribiendo…</div>';
+      chat.appendChild(cargando);
+      try {
+        const r = await fetch('/ask', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ pregunta: texto })
+        });
+        const data = await r.json();
+        cargando.remove();
+        if (r.ok) burbuja(data.respuesta, 'bot', data.fuentes);
+        else burbuja('⚠️ ' + (data.detail || 'Error en el servidor.'), 'bot');
+      } catch (e) {
+        cargando.remove();
+        burbuja('⚠️ No se pudo conectar con el servidor.', 'bot');
+      } finally {
+        boton.disabled = false;
+        input.focus();
+      }
+    }
+
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const t = input.value.trim();
+      if (t) preguntar(t);
+    });
+
+    document.getElementById('chips').addEventListener('click', (e) => {
+      if (e.target.classList.contains('chip')) preguntar(e.target.textContent);
+    });
+  </script>
+</body>
+</html>

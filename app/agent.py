@@ -6,12 +6,12 @@ Flujo:
 """
 from __future__ import annotations
 
-import oci
+from google.genai import types
 
 from .chunker import dividir_en_chunks
 from .config import settings
 from .embeddings import embed_consulta, embed_documentos
-from .oci_client import build_genai_client
+from .llm_client import build_client
 from .pdf_loader import leer_pdf
 from .vector_store import VectorStore
 
@@ -90,26 +90,21 @@ class TourismAgent:
         }
 
     def _generar(self, pregunta: str, contexto: str) -> str:
-        """Llama al modelo de chat de OCI con el contexto recuperado."""
-        cliente = build_genai_client()
+        """Llama al modelo de chat de Gemini con el contexto recuperado."""
+        cliente = build_client()
 
         mensaje = (
-            f"{SYSTEM_PROMPT}\n\n"
             f"### Contexto de la guía:\n{contexto}\n\n"
             f"### Pregunta del usuario:\n{pregunta}"
         )
 
-        chat_request = oci.generative_ai_inference.models.CohereChatRequest(
-            message=mensaje,
-            max_tokens=600,
-            temperature=0.2,
-        )
-        detalles = oci.generative_ai_inference.models.ChatDetails(
-            serving_mode=oci.generative_ai_inference.models.OnDemandServingMode(
-                model_id=settings.chat_model
+        respuesta = cliente.models.generate_content(
+            model=settings.chat_model,
+            contents=mensaje,
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                temperature=0.2,
+                max_output_tokens=800,
             ),
-            chat_request=chat_request,
-            compartment_id=settings.compartment_id,
         )
-        respuesta = cliente.chat(detalles)
-        return respuesta.data.chat_response.text.strip()
+        return (respuesta.text or "").strip()

@@ -18,18 +18,12 @@ def _get(nombre: str, por_defecto: str = "") -> str:
 class Settings:
     """Configuración inmutable de la aplicación."""
 
-    # Autenticación OCI
-    oci_auth: str = _get("OCI_AUTH", "config_file")
-    oci_config_profile: str = _get("OCI_CONFIG_PROFILE", "DEFAULT")
-    compartment_id: str = _get("OCI_COMPARTMENT_ID")
-    genai_endpoint: str = _get(
-        "OCI_GENAI_ENDPOINT",
-        "https://inference.generativeai.us-chicago-1.oci.oraclecloud.com",
-    )
+    # Proveedor de IA: Google Gemini
+    gemini_api_key: str = _get("GEMINI_API_KEY")
 
     # Modelos
-    embed_model: str = _get("OCI_EMBED_MODEL", "cohere.embed-multilingual-v3.0")
-    chat_model: str = _get("OCI_CHAT_MODEL", "cohere.command-r-08-2024")
+    chat_model: str = _get("GEMINI_CHAT_MODEL", "gemini-2.0-flash")
+    embed_model: str = _get("GEMINI_EMBED_MODEL", "text-embedding-004")
 
     # Documento y parámetros de RAG
     pdf_path: str = _get("PDF_PATH", "data/guia_turistica_santander.pdf")
@@ -40,9 +34,10 @@ class Settings:
 
     def validar(self) -> None:
         """Lanza un error claro si falta configuración esencial."""
-        if not self.compartment_id:
+        if not self.gemini_api_key:
             raise ValueError(
-                "Falta OCI_COMPARTMENT_ID. Copia .env.example a .env y complétalo."
+                "Falta GEMINI_API_KEY. Copia .env.example a .env y complétalo "
+                "con tu clave de https://aistudio.google.com/app/apikey"
             )
 
 

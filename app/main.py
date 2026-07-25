@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Agente Turístico de Santander",
     description="Agente IA (RAG) que responde preguntas sobre turismo en Santander, "
-    "Colombia, usando OCI Generative AI.",
+    "Colombia, usando Google Gemini.",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -71,7 +71,7 @@ def ask(entrada: PreguntaIn) -> RespuestaOut:
     if not agent.esta_listo():
         raise HTTPException(
             status_code=503,
-            detail="El índice no está listo. Verifica la configuración de OCI y usa /reindex.",
+            detail="El índice no está listo. Verifica tu GEMINI_API_KEY y usa /reindex.",
         )
     try:
         resultado = agent.preguntar(entrada.pregunta)

@@ -2,8 +2,9 @@
 
 Agente de inteligencia artificial que responde preguntas sobre los **sitios turísticos
 del departamento de Santander, Colombia**, a partir del contenido de un documento PDF.
-Utiliza la técnica **RAG (Retrieval-Augmented Generation)** con **OCI Generative AI**
-(modelos Cohere) y está expuesto mediante una **API con FastAPI** y una interfaz web de chat.
+Utiliza la técnica **RAG (Retrieval-Augmented Generation)** con **Google Gemini**
+(chat + embeddings), está expuesto mediante una **API con FastAPI** con interfaz web de
+chat, y se despliega en **Oracle Cloud Infrastructure (OCI Compute)**.
 
 > Proyecto desarrollado para el **Challenge Alura Agente**.
 
@@ -39,15 +40,15 @@ Esto hace las respuestas más precisas, económicas y libres de alucinaciones.
         ┌────────────────────────────────┼───────────────────────────────┐
         │                                 │                               │
         ▼ (indexación, 1 vez)             ▼ (por pregunta)                │
- ┌─────────────┐   ┌──────────┐    ┌───────────────┐   ┌──────────────┐   │
- │  PDF Loader │──▶│ Chunker  │──▶ │  Embeddings   │──▶│ Vector Store │◀──┘
- │  (pypdf)    │   │ (overlap)│    │ (OCI Cohere)  │   │ (NumPy/coseno)│
- └─────────────┘   └──────────┘    └───────────────┘   └──────┬───────┘
+ ┌─────────────┐   ┌──────────┐    ┌────────────────┐   ┌──────────────┐   │
+ │  PDF Loader │──▶│ Chunker  │──▶ │   Embeddings   │──▶│ Vector Store │◀──┘
+ │  (pypdf)    │   │ (overlap)│    │ (Gemini embed) │   │ (NumPy/coseno)│
+ └─────────────┘   └──────────┘    └────────────────┘   └──────┬───────┘
                                                               │ top-k
                                                               ▼
                                                     ┌──────────────────┐
-                                                    │  OCI Generative  │
-                                                    │  AI — LLM (chat) │
+                                                    │  Google Gemini   │
+                                                    │    LLM (chat)    │
                                                     └────────┬─────────┘
                                                              ▼
                                                      Respuesta + fuentes
@@ -68,7 +69,7 @@ alura-latam/
 │   ├── chunker.py       # Fragmentación con solapamiento
 │   ├── embeddings.py    # Embeddings con OCI Generative AI
 │   ├── vector_store.py  # Índice vectorial NumPy (similitud del coseno)
-│   ├── oci_client.py    # Cliente autenticado de OCI
+│   ├── llm_client.py    # Cliente de Google Gemini
 │   └── config.py        # Configuración desde variables de entorno
 ├── static/index.html    # Interfaz web de chat
 ├── scripts/build_index.py  # Construye el índice por CLI
@@ -91,11 +92,11 @@ alura-latam/
 |--------------------|-----------------------------------------------|
 | Lenguaje           | Python 3.11+                                  |
 | API web            | FastAPI + Uvicorn                             |
-| IA / LLM           | OCI Generative AI — `cohere.command-r-08-2024`|
-| Embeddings         | OCI Generative AI — `cohere.embed-multilingual-v3.0` |
+| IA / LLM           | Google Gemini — `gemini-2.0-flash`            |
+| Embeddings         | Google Gemini — `text-embedding-004`          |
 | Búsqueda vectorial | NumPy (similitud del coseno)                  |
 | Lectura de PDF     | pypdf                                         |
-| Nube / Deploy      | Oracle Cloud Infrastructure (OCI)             |
+| Nube / Deploy      | Oracle Cloud Infrastructure (OCI Compute)     |
 | Frontend           | HTML + CSS + JavaScript (vanilla)             |
 | Testing            | pytest                                        |
 
@@ -105,9 +106,9 @@ alura-latam/
 
 ### 1. Requisitos previos
 - Python 3.11 o superior.
-- Una cuenta de **Oracle Cloud (OCI)** con acceso a **Generative AI** habilitado en tu región
-  (por ejemplo, `us-chicago-1` o `eu-frankfurt-1`).
-- Credenciales de OCI configuradas (ver paso 4).
+- Una **API key de Google Gemini** (gratuita), que se obtiene en
+  [Google AI Studio](https://aistudio.google.com/app/apikey).
+- (Para el deploy) una cuenta de **Oracle Cloud (OCI)** con acceso a **Compute**.
 
 ### 2. Clonar e instalar dependencias
 ```bash
@@ -125,31 +126,22 @@ pip install -r requirements.txt
 ```bash
 cp .env.example .env
 ```
-Edita `.env` y completa como mínimo:
-- `OCI_COMPARTMENT_ID` — el OCID de tu compartment.
-- `OCI_GENAI_ENDPOINT` — el endpoint de tu región.
+Edita `.env` y completa:
+- `GEMINI_API_KEY` — tu clave de [Google AI Studio](https://aistudio.google.com/app/apikey).
 
-### 4. Configurar credenciales de OCI
-**Opción A — Local (archivo de configuración):** crea `~/.oci/config` siguiendo la
-[guía oficial de OCI](https://docs.oracle.com/en-us/iaas/Content/API/Concepts/sdkconfig.htm)
-y deja `OCI_AUTH=config_file` en `.env`.
-
-**Opción B — En la VM de OCI (recomendado):** usa *Instance Principals* (sin claves en el
-servidor) definiendo `OCI_AUTH=instance_principal` en `.env`.
-
-### 5. Construir el índice del documento
+### 4. Construir el índice del documento
 ```bash
 python scripts/build_index.py
 ```
 
-### 6. Levantar la aplicación
+### 5. Levantar la aplicación
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 Abre tu navegador en **http://localhost:8000** para usar el chat, o consulta la documentación
 interactiva de la API en **http://localhost:8000/docs**.
 
-### 7. (Opcional) Ejecutar los tests
+### 6. (Opcional) Ejecutar los tests
 ```bash
 python -m pytest -q
 ```
@@ -158,22 +150,22 @@ python -m pytest -q
 
 ## ☁️ Despliegue en OCI
 
-El proyecto se despliega en una **instancia Compute** de OCI (elegible para el *Always Free
-Tier* con la shape `VM.Standard.A1.Flex`). Pasos resumidos:
+El agente se despliega en una **instancia Compute** de OCI (una VM). El modelo de lenguaje
+(Google Gemini) se consume por API, por lo que basta con definir la `GEMINI_API_KEY` en el
+servidor. Pasos resumidos:
 
 1. Crear la VM (Ubuntu 22.04) y abrir el puerto `8000` en la *Security List* / *NSG*.
-2. Asignar un *Dynamic Group* + *Policy* para habilitar **Instance Principals** hacia Generative AI.
-3. En la VM:
+2. Conectarse por SSH y preparar el entorno:
    ```bash
    git clone https://github.com/<tu-usuario>/<tu-repo>.git
    cd <tu-repo>
    python3 -m venv venv && source venv/bin/activate
    pip install -r requirements.txt
-   cp .env.example .env   # OCI_AUTH=instance_principal
+   cp .env.example .env          # edita .env y coloca tu GEMINI_API_KEY
    python scripts/build_index.py
    uvicorn app.main:app --host 0.0.0.0 --port 8000
    ```
-4. (Opcional) Contenerizar con el `Dockerfile` incluido y correr con Docker.
+3. (Opcional) Contenerizar con el `Dockerfile` incluido y correr con Docker.
 
 > 🔗 **Aplicación desplegada:** _(añade aquí la URL pública, ej. `http://<IP-pública>:8000`)_
 > 🖼️ **Captura del deploy:** ver `docs/captura-deploy.png`.

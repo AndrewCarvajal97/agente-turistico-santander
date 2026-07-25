@@ -75,8 +75,7 @@ alura-latam/
 │   ├── pdf_loader.py    # Lectura y limpieza del texto del PDF
 │   ├── memory.py        # Memoria de conversaciones en CSV (pandas + filtros)
 │   ├── analytics.py     # Análisis de conversaciones (pandas + LLM + JSON)
-│   ├── llm.py           # Capa multi-proveedor de LLM (Gemini o Groq)
-│   ├── llm_client.py    # Cliente de Google Gemini
+│   ├── llm.py           # Capa LLM con LangChain (Gemini o Groq + fallback)
 │   └── config.py        # Configuración desde variables de entorno
 ├── static/index.html    # Interfaz web de chat
 ├── tests/test_agent.py  # Tests unitarios (sin llamar a la API)
@@ -99,6 +98,7 @@ alura-latam/
 |------------------|-----------------------------------------------|
 | Lenguaje         | Python 3.11+                                  |
 | API web          | FastAPI + Uvicorn                             |
+| Orquestación LLM | **LangChain** (chat models + prompts + LCEL + fallback) |
 | IA / LLM         | **Google Gemini** o **Groq** (Llama/Gemma, open source) — conmutable |
 | Lectura de PDF   | pypdf                                         |
 | Memoria / datos  | pandas (CSV de sesiones, filtros)             |

@@ -1,4 +1,7 @@
-"""Capa de proveedor de LLM (multi-proveedor con fallback en cadena).
+"""Capa de proveedor de LLM con **LangChain** (multi-proveedor con fallback).
+
+Usa los chat models de LangChain (`ChatGroq`, `ChatGoogleGenerativeAI`), plantillas
+de prompt (`ChatPromptTemplate`) y cadenas **LCEL** (`prompt | modelo | parser`).
 
 Permite responder con **Google Gemini** o con **Groq** (modelos open source como
 Llama o Gemma) según `LLM_PROVIDER`. Además, aplica una **estrategia de respaldo**:
@@ -38,45 +41,51 @@ def _codigo_http(exc: Exception) -> int | None:
 
 
 # --------------------------------------------------------------------- #
-# Proveedores concretos (reciben el modelo a usar)
+# Proveedores concretos con LangChain (chat model + prompt + cadena LCEL)
 # --------------------------------------------------------------------- #
-def _generar_gemini(mensaje: str, system_instruction: str, max_tokens: int, modelo: str) -> str:
-    from google.genai import types
+def _invocar_cadena(modelo_chat, mensaje: str, system_instruction: str) -> str:
+    """Arma una cadena LCEL (prompt | modelo | parser) y la ejecuta.
 
-    from .llm_client import build_client
+    Se usan variables ({sistema}, {entrada}) para que el contenido del documento
+    no se interprete como marcadores de la plantilla.
+    """
+    from langchain_core.output_parsers import StrOutputParser
+    from langchain_core.prompts import ChatPromptTemplate
 
-    cliente = build_client()
-    respuesta = cliente.models.generate_content(
-        model=modelo,
-        contents=mensaje,
-        config=types.GenerateContentConfig(
-            system_instruction=system_instruction,
-            temperature=0.2,
-            max_output_tokens=max_tokens,
-        ),
+    prompt = ChatPromptTemplate.from_messages(
+        [("system", "{sistema}"), ("human", "{entrada}")]
     )
-    return (respuesta.text or "").strip()
+    cadena = prompt | modelo_chat | StrOutputParser()
+    texto = cadena.invoke({"sistema": system_instruction, "entrada": mensaje})
+    return (texto or "").strip()
+
+
+def _generar_gemini(mensaje: str, system_instruction: str, max_tokens: int, modelo: str) -> str:
+    from langchain_google_genai import ChatGoogleGenerativeAI
+
+    chat = ChatGoogleGenerativeAI(
+        model=modelo,
+        google_api_key=settings.gemini_api_key,
+        temperature=0.2,
+        max_output_tokens=max_tokens,
+    )
+    return _invocar_cadena(chat, mensaje, system_instruction)
 
 
 def _generar_groq(mensaje: str, system_instruction: str, max_tokens: int, modelo: str) -> str:
-    from groq import Groq
+    from langchain_groq import ChatGroq
 
     if not settings.groq_api_key:
         raise ValueError("Falta GROQ_API_KEY.")
-    cliente = Groq(api_key=settings.groq_api_key)
-    # Groq no usa "pensamiento" interno; con ~1024 tokens sobra y no se trunca.
-    # Mantenerlo bajo evita superar el límite de tokens por minuto del free tier.
-    tope = min(max_tokens, 1024)
-    respuesta = cliente.chat.completions.create(
+    # Groq (Llama) no "piensa"; con ~1024 tokens sobra y no se trunca. Mantenerlo
+    # bajo evita superar el límite de tokens por minuto del free tier.
+    chat = ChatGroq(
         model=modelo,
-        messages=[
-            {"role": "system", "content": system_instruction},
-            {"role": "user", "content": mensaje},
-        ],
+        api_key=settings.groq_api_key,
         temperature=0.2,
-        max_tokens=tope,
+        max_tokens=min(max_tokens, 1024),
     )
-    return (respuesta.choices[0].message.content or "").strip()
+    return _invocar_cadena(chat, mensaje, system_instruction)
 
 
 _GENERADORES = {"gemini": _generar_gemini, "groq": _generar_groq}

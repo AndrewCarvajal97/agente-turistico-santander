@@ -26,8 +26,9 @@ SYSTEM_VISION = (
 
 
 class AnalisisImagen(BaseModel):
-    """Estructura de salida del análisis de una imagen."""
+    """Estructura de salida del análisis de una imagen (modelo Pydantic)."""
 
+    titulo: str = Field(description="Un título breve y adecuado para la imagen")
     descripcion: str = Field(description="Descripción clara y objetiva de la imagen, en español")
     etiquetas: list[str] = Field(description="Entre 3 y 5 palabras clave en minúsculas, sin tildes")
     relacion_santander: str = Field(
@@ -103,4 +104,9 @@ def analizar_imagen(imagen_b64: str, mime: str = "image/jpeg", pregunta: str = "
         texto_plano = (template_txt | chat | StrOutputParser()).invoke(
             {"pregunta": texto, "imagen": data_uri}
         )
-        return {"descripcion": texto_plano.strip(), "etiquetas": [], "relacion_santander": ""}
+        return {
+            "titulo": "",
+            "descripcion": texto_plano.strip(),
+            "etiquetas": [],
+            "relacion_santander": "",
+        }

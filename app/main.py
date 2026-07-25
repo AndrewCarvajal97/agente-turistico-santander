@@ -150,6 +150,7 @@ async def vision_endpoint(file: UploadFile = File(...), pregunta: str = Form("")
     except Exception as exc:  # noqa: BLE001 - degradación amable (visión solo en Gemini)
         print(f"[vision] error -> {exc}")
         return {
+            "titulo": "",
             "descripcion": (
                 "No pude analizar la imagen en este momento (la visión usa Gemini y "
                 "quizá se alcanzó su límite). Intenta de nuevo en un rato. 🙏"

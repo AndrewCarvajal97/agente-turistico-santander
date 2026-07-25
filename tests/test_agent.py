@@ -102,9 +102,12 @@ def _error_429() -> Exception:
     return exc
 
 
+_PROVEEDORES = ("groq", "gemini", "cohere")
+
+
 def test_llm_devuelve_primer_exito(monkeypatch):
-    monkeypatch.setitem(llm._GENERADORES, "groq", lambda *a, **k: "RESPUESTA")
-    monkeypatch.setitem(llm._GENERADORES, "gemini", lambda *a, **k: "RESPUESTA")
+    for prov in _PROVEEDORES:
+        monkeypatch.setitem(llm._GENERADORES, prov, lambda *a, **k: "RESPUESTA")
     assert llm.generar_texto("hola", "sys", 100) == "RESPUESTA"
 
 
@@ -117,8 +120,8 @@ def test_llm_pasa_al_siguiente_si_no_hay_cupo(monkeypatch):
             raise _error_429()
         return "OK-RESPALDO"
 
-    monkeypatch.setitem(llm._GENERADORES, "groq", generador)
-    monkeypatch.setitem(llm._GENERADORES, "gemini", generador)
+    for prov in _PROVEEDORES:
+        monkeypatch.setitem(llm._GENERADORES, prov, generador)
     assert llm.generar_texto("hola", "sys", 100) == "OK-RESPALDO"
     assert estado["n"] >= 2  # usó el respaldo
 
@@ -127,8 +130,8 @@ def test_llm_sin_cupo_lanza_error(monkeypatch):
     def siempre_sin_cupo(*a, **k):
         raise _error_429()
 
-    monkeypatch.setitem(llm._GENERADORES, "groq", siempre_sin_cupo)
-    monkeypatch.setitem(llm._GENERADORES, "gemini", siempre_sin_cupo)
+    for prov in _PROVEEDORES:
+        monkeypatch.setitem(llm._GENERADORES, prov, siempre_sin_cupo)
     with pytest.raises(llm.SinCupoError):
         llm.generar_texto("hola", "sys", 100)
 

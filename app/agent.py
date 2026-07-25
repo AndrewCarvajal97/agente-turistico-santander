@@ -89,7 +89,9 @@ class TourismAgent:
         bloques.append(f"### Pregunta del usuario:\n{pregunta}")
         mensaje = "\n\n".join(bloques)
 
-        respuesta = self._llamar_modelo(mensaje, SYSTEM_PROMPT, max_tokens=800)
+        respuesta = self._llamar_modelo(
+            mensaje, SYSTEM_PROMPT, max_tokens=settings.max_output_tokens
+        )
         return {"respuesta": respuesta, "fuente": self.fuente}
 
     def resumir(self, texto: str, resumen_previo: str = "") -> str:
@@ -99,15 +101,20 @@ class TourismAgent:
             f"### Intercambios nuevos a integrar:\n{texto}\n\n"
             f"### Resumen actualizado:"
         )
-        return self._llamar_modelo(mensaje, SYSTEM_PROMPT_RESUMEN, max_tokens=300)
+        return self._llamar_modelo(mensaje, SYSTEM_PROMPT_RESUMEN, max_tokens=4096)
 
     # ------------------------------------------------------------------ #
     # Llamada al modelo (con reintentos)
     # ------------------------------------------------------------------ #
     def _llamar_modelo(
-        self, mensaje: str, system_instruction: str, max_tokens: int = 800, intentos: int = 3
+        self, mensaje: str, system_instruction: str, max_tokens: int = 2048, intentos: int = 3
     ) -> str:
-        """Llama a Gemini reintentando ante errores transitorios."""
+        """Llama a Gemini reintentando ante errores transitorios.
+
+        Se usa un `max_output_tokens` amplio porque el modelo consume parte del
+        presupuesto en su "pensamiento" interno; con un margen holgado la
+        respuesta final no se trunca a media frase.
+        """
         cliente = build_client()
         config = types.GenerateContentConfig(
             system_instruction=system_instruction,

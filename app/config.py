@@ -23,6 +23,9 @@ class Settings:
 
     # Modelo de chat (alias "latest" para no depender de versiones que se deprecan)
     chat_model: str = _get("GEMINI_CHAT_MODEL", "gemini-flash-latest")
+    # Tope de tokens de salida (amplio para que el "pensamiento" del modelo no
+    # trunque la respuesta final).
+    max_output_tokens: int = int(_get("MAX_OUTPUT_TOKENS", "50000") or 50000)
 
     # Documento fuente
     pdf_path: str = _get("PDF_PATH", "data/guia_turistica_santander.pdf")

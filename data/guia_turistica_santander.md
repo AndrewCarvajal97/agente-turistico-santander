@@ -28,6 +28,12 @@ numerosos parques, su clima templado agradable durante todo el año y su gastron
 Atractivos destacados:
 - Parque Nacional del Agua (Acualago).
 - Cerro del Santísimo, con un mirador y un teleférico que ofrece vistas panorámicas de la ciudad.
+- **Parque San Pío**, uno de los parques más emblemáticos y concurridos de Bucaramanga. Está
+  ubicado en la Carrera 33 con Calle 45, en el sector de la Zona Rosa, y es famoso por la
+  escultura **"El Pensamiento"** (un desnudo en bronce del maestro Fernando Botero). Está
+  rodeado de cafés, restaurantes y heladerías, y es un punto de encuentro social de la ciudad.
+- **Parque Santander**, en el corazón del centro histórico, es el parque principal y tradicional
+  punto de encuentro de los bumangueses.
 - Parque de los Niños y Parque García Rovira.
 - Zona rosa de Cabecera, con restaurantes, bares y vida nocturna.
 
@@ -150,6 +156,11 @@ La capital es Bucaramanga, conocida como "La Ciudad Bonita" y "La Ciudad de los 
 **¿Cuál es el principal atractivo natural de Santander?**
 El Cañón del Chicamocha, una formación geológica de más de 227 km de longitud, con su Parque
 Nacional (Panachi) y uno de los teleféricos más largos del mundo.
+
+**¿Dónde queda el Parque San Pío?**
+El Parque San Pío está en Bucaramanga, en la Carrera 33 con Calle 45 (sector de la Zona Rosa).
+Es famoso por la escultura "El Pensamiento" de Fernando Botero y está rodeado de cafés y
+restaurantes.
 
 **¿Dónde puedo practicar rafting en Santander?**
 En San Gil, en el río Fonce (para principiantes) y en el río Suárez (para expertos).

@@ -12,18 +12,10 @@ demasiados tokens.
 from __future__ import annotations
 
 import os
-import time
 
-from google.genai import types
-from google.genai import errors as genai_errors
-
+from . import llm
 from .config import settings
-from .llm_client import build_client
 from .pdf_loader import leer_pdf
-
-# Códigos HTTP transitorios que conviene reintentar (cuota momentánea, servicio
-# recién habilitado y aún propagándose, indisponibilidad temporal).
-_CODIGOS_REINTENTABLES = {429, 500, 503}
 
 SYSTEM_PROMPT = (
     "Eres un asistente turístico experto en el departamento de Santander, Colombia. "
@@ -107,33 +99,7 @@ class TourismAgent:
     # Llamada al modelo (con reintentos)
     # ------------------------------------------------------------------ #
     def _llamar_modelo(
-        self, mensaje: str, system_instruction: str, max_tokens: int = 2048, intentos: int = 3
+        self, mensaje: str, system_instruction: str, max_tokens: int = 2048
     ) -> str:
-        """Llama a Gemini reintentando ante errores transitorios.
-
-        Se usa un `max_output_tokens` amplio porque el modelo consume parte del
-        presupuesto en su "pensamiento" interno; con un margen holgado la
-        respuesta final no se trunca a media frase.
-        """
-        cliente = build_client()
-        config = types.GenerateContentConfig(
-            system_instruction=system_instruction,
-            temperature=0.2,
-            max_output_tokens=max_tokens,
-        )
-
-        for intento in range(1, intentos + 1):
-            try:
-                respuesta = cliente.models.generate_content(
-                    model=settings.chat_model, contents=mensaje, config=config
-                )
-                return (respuesta.text or "").strip()
-            except genai_errors.APIError as exc:
-                codigo = getattr(exc, "code", None)
-                # Un 403 aquí suele ser la API recién habilitada en un proyecto
-                # nuevo, aún propagándose entre los servidores de Google.
-                es_propagacion = codigo == 403
-                if (codigo in _CODIGOS_REINTENTABLES or es_propagacion) and intento < intentos:
-                    time.sleep(2 * intento)  # backoff simple: 2s, 4s
-                    continue
-                raise
+        """Genera texto con el proveedor de LLM configurado (Gemini o Groq)."""
+        return llm.generar_texto(mensaje, system_instruction, max_tokens)

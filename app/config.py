@@ -18,14 +18,20 @@ def _get(nombre: str, por_defecto: str = "") -> str:
 class Settings:
     """Configuración inmutable de la aplicación."""
 
-    # Proveedor de IA: Google Gemini
-    gemini_api_key: str = _get("GEMINI_API_KEY")
+    # Proveedor de LLM: "gemini" o "groq"
+    llm_provider: str = _get("LLM_PROVIDER", "gemini")
 
+    # --- Google Gemini ---
+    gemini_api_key: str = _get("GEMINI_API_KEY")
     # Modelo de chat (alias "latest" para no depender de versiones que se deprecan)
     chat_model: str = _get("GEMINI_CHAT_MODEL", "gemini-flash-latest")
     # Tope de tokens de salida (amplio para que el "pensamiento" del modelo no
     # trunque la respuesta final).
     max_output_tokens: int = int(_get("MAX_OUTPUT_TOKENS", "50000") or 50000)
+
+    # --- Groq (modelos open source: Llama, Gemma) ---
+    groq_api_key: str = _get("GROQ_API_KEY")
+    groq_model: str = _get("GROQ_MODEL", "llama-3.3-70b-versatile")
 
     # Documento fuente
     pdf_path: str = _get("PDF_PATH", "data/guia_turistica_santander.pdf")
@@ -38,11 +44,17 @@ class Settings:
     memory_min_turns: int = int(_get("MEMORY_MIN_TURNS", "3") or 3)
 
     def validar(self) -> None:
-        """Lanza un error claro si falta configuración esencial."""
-        if not self.gemini_api_key:
+        """Lanza un error claro si falta configuración esencial del proveedor activo."""
+        prov = self.llm_provider.lower()
+        if prov == "groq" and not self.groq_api_key:
             raise ValueError(
-                "Falta GEMINI_API_KEY. Copia .env.example a .env y complétalo "
-                "con tu clave de https://aistudio.google.com/app/apikey"
+                "Falta GROQ_API_KEY (LLM_PROVIDER=groq). Obtén una gratis en "
+                "https://console.groq.com/keys"
+            )
+        if prov == "gemini" and not self.gemini_api_key:
+            raise ValueError(
+                "Falta GEMINI_API_KEY (LLM_PROVIDER=gemini). Copia .env.example a .env "
+                "y complétalo con tu clave de https://aistudio.google.com/app/apikey"
             )
 
 

@@ -89,7 +89,7 @@ alura-latam/
 |------------------|-----------------------------------------------|
 | Lenguaje         | Python 3.11+                                  |
 | API web          | FastAPI + Uvicorn                             |
-| IA / LLM         | Google Gemini — `gemini-flash-latest`         |
+| IA / LLM         | **Google Gemini** o **Groq** (Llama/Gemma, open source) — conmutable |
 | Lectura de PDF   | pypdf                                         |
 | Nube / Deploy    | Oracle Cloud Infrastructure (OCI Compute)     |
 | Frontend         | HTML + CSS + JavaScript (vanilla)             |
@@ -120,10 +120,20 @@ pip install -r requirements.txt
 ```bash
 cp .env.example .env
 ```
-Edita `.env` y coloca tu clave:
+Edita `.env` y coloca tu clave según el proveedor que elijas:
+
+**Opción A — Google Gemini** (por defecto):
 ```
+LLM_PROVIDER=gemini
 GEMINI_API_KEY=AIza...tu_clave...
 ```
+
+**Opción B — Groq** (modelos open source, free tier más generoso y muy rápido):
+```
+LLM_PROVIDER=groq
+GROQ_API_KEY=gsk_...tu_clave...
+```
+Consigue la clave de Groq (gratis, sin tarjeta) en [console.groq.com/keys](https://console.groq.com/keys).
 
 ### 4. Levantar la aplicación
 ```bash

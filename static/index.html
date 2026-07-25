@@ -195,8 +195,18 @@
         const r = await fetch('/vision', { method: 'POST', body: datos });
         const data = await r.json();
         cargando.remove();
-        if (r.ok) burbuja(data.descripcion, 'bot');
-        else burbuja('⚠️ ' + (data.detail || 'Error al analizar la imagen.'), 'bot');
+        if (r.ok) {
+          let txt = data.descripcion || '';
+          if (data.relacion_santander && data.relacion_santander.toLowerCase() !== 'ninguna') {
+            txt += '\n\n📍 Santander: ' + data.relacion_santander;
+          }
+          if (data.etiquetas && data.etiquetas.length) {
+            txt += '\n🏷️ ' + data.etiquetas.join(' · ');
+          }
+          burbuja(txt, 'bot');
+        } else {
+          burbuja('⚠️ ' + (data.detail || 'Error al analizar la imagen.'), 'bot');
+        }
       } catch (e) {
         cargando.remove();
         burbuja('⚠️ No se pudo conectar con el servidor.', 'bot');

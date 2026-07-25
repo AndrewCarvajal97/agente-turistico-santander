@@ -1,26 +1,38 @@
-"""Análisis de imágenes (visión) con Gemini vía LangChain.
+"""Análisis de imágenes (visión) con Gemini vía LangChain — salida estructurada.
 
-Como se vio en el curso, **no todos los LLM soportan imágenes**: en esta
-configuración solo **Gemini** hace visión (Groq/Cohere son de texto). Por eso este
-módulo usa específicamente `ChatGoogleGenerativeAI`.
+Aplica LCEL: una cadena `plantilla | modelo | parser`. Aquí el parser es un
+`JsonOutputParser` validado con un modelo **Pydantic**, de modo que la salida sea
+un **JSON estructurado** (descripción + etiquetas + relación con Santander), más
+fácil de integrar en una app que un texto libre.
 
-La imagen se codifica en **base64** (como `encode_image` del curso) y se envía en
-un mensaje **multimodal** (`HumanMessage` con un bloque de texto y uno de imagen).
+Como se vio en el curso, **solo Gemini** hace visión en esta configuración
+(Groq/Cohere son de texto), así que se usa `ChatGoogleGenerativeAI`. La imagen se
+codifica en base64 y se envía en un mensaje multimodal.
 """
 from __future__ import annotations
 
 import base64
 from pathlib import Path
 
+from pydantic import BaseModel, Field
+
 from .config import settings
 
 SYSTEM_VISION = (
     "Eres un guía turístico experto en el departamento de Santander, Colombia. "
-    "Describe la imagen de forma clara y amable, en español. Si reconoces un lugar, "
-    "un plato típico o una actividad relacionada con el turismo de Santander, "
-    "identifícalo y añade un dato útil. Si no tiene relación con Santander, descríbela "
-    "igual con honestidad."
+    "Analiza la imagen de forma objetiva y, si reconoces un lugar, plato típico o "
+    "actividad relacionada con el turismo de Santander, indícalo. Responde en español."
 )
+
+
+class AnalisisImagen(BaseModel):
+    """Estructura de salida del análisis de una imagen."""
+
+    descripcion: str = Field(description="Descripción clara y objetiva de la imagen, en español")
+    etiquetas: list[str] = Field(description="Entre 3 y 5 palabras clave en minúsculas, sin tildes")
+    relacion_santander: str = Field(
+        description="Relación con el turismo de Santander (lugar, plato o actividad), o 'ninguna'"
+    )
 
 
 def encode_image(ruta: str | Path) -> str:
@@ -29,36 +41,33 @@ def encode_image(ruta: str | Path) -> str:
         return base64.b64encode(archivo.read()).decode("utf-8")
 
 
-def analizar_imagen(imagen_b64: str, mime: str = "image/jpeg", pregunta: str = "") -> str:
-    """Envía una imagen (base64) a Gemini visión y devuelve su descripción.
-
-    Usa una plantilla multimodal (`ChatPromptTemplate`) donde la imagen y la
-    pregunta son variables, y una cadena LCEL con `StrOutputParser` para asegurar
-    que la salida sea siempre un string (más robusto y fácil de integrar).
-    """
-    from langchain_core.output_parsers import StrOutputParser
-    from langchain_core.prompts import ChatPromptTemplate
+def _modelo():
     from langchain_google_genai import ChatGoogleGenerativeAI
 
     if not settings.gemini_api_key:
         raise ValueError("Falta GEMINI_API_KEY para el análisis de imágenes.")
-
-    chat = ChatGoogleGenerativeAI(
+    return ChatGoogleGenerativeAI(
         model=settings.chat_model,
         google_api_key=settings.gemini_api_key,
         temperature=0.2,
         max_output_tokens=settings.max_output_tokens,
     )
-    texto = pregunta.strip() or (
-        "¿Qué muestra esta imagen? Si es un lugar, plato o actividad de Santander, "
-        "identifícalo."
-    )
 
-    # El data-URI completo va como una sola variable ({imagen}): LangChain solo
-    # permite una variable de formato por plantilla de imagen.
-    template_analisis = ChatPromptTemplate.from_messages(
+
+def analizar_imagen(imagen_b64: str, mime: str = "image/jpeg", pregunta: str = "") -> dict:
+    """Analiza una imagen y devuelve un dict {descripcion, etiquetas, relacion_santander}."""
+    from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
+    from langchain_core.prompts import ChatPromptTemplate
+
+    chat = _modelo()
+    data_uri = f"data:{mime};base64,{imagen_b64}"
+    texto = pregunta.strip() or "Analiza esta imagen."
+
+    # Cadena LCEL con salida estructurada (JSON validado por el modelo Pydantic).
+    parser = JsonOutputParser(pydantic_object=AnalisisImagen)
+    template = ChatPromptTemplate.from_messages(
         [
-            ("system", SYSTEM_VISION),
+            ("system", SYSTEM_VISION + "\n\n# FORMATO DE SALIDA (JSON)\n{formato}"),
             (
                 "user",
                 [
@@ -68,8 +77,30 @@ def analizar_imagen(imagen_b64: str, mime: str = "image/jpeg", pregunta: str = "
             ),
         ]
     )
-    cadena_analisis = template_analisis | chat | StrOutputParser()
-    salida = cadena_analisis.invoke(
-        {"pregunta": texto, "imagen": f"data:{mime};base64,{imagen_b64}"}
-    )
-    return salida.strip()
+    cadena = template | chat | parser
+    try:
+        return cadena.invoke(
+            {
+                "pregunta": texto,
+                "imagen": data_uri,
+                "formato": parser.get_format_instructions(),
+            }
+        )
+    except Exception as exc:  # noqa: BLE001 - respaldo a texto plano si el JSON falla
+        print(f"[vision] salida JSON falló ({exc}); uso texto plano.")
+        template_txt = ChatPromptTemplate.from_messages(
+            [
+                ("system", SYSTEM_VISION),
+                (
+                    "user",
+                    [
+                        {"type": "text", "text": "{pregunta}"},
+                        {"type": "image_url", "image_url": "{imagen}"},
+                    ],
+                ),
+            ]
+        )
+        texto_plano = (template_txt | chat | StrOutputParser()).invoke(
+            {"pregunta": texto, "imagen": data_uri}
+        )
+        return {"descripcion": texto_plano.strip(), "etiquetas": [], "relacion_santander": ""}

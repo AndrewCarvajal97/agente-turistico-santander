@@ -146,14 +146,17 @@ async def vision_endpoint(file: UploadFile = File(...), pregunta: str = Form("")
 
     try:
         b64 = base64.b64encode(datos).decode("utf-8")
-        descripcion = vision.analizar_imagen(b64, file.content_type, pregunta)
+        return vision.analizar_imagen(b64, file.content_type, pregunta)
     except Exception as exc:  # noqa: BLE001 - degradación amable (visión solo en Gemini)
         print(f"[vision] error -> {exc}")
-        descripcion = (
-            "No pude analizar la imagen en este momento (la visión usa Gemini y quizá "
-            "se alcanzó su límite). Intenta de nuevo en un rato. 🙏"
-        )
-    return {"descripcion": descripcion}
+        return {
+            "descripcion": (
+                "No pude analizar la imagen en este momento (la visión usa Gemini y "
+                "quizá se alcanzó su límite). Intenta de nuevo en un rato. 🙏"
+            ),
+            "etiquetas": [],
+            "relacion_santander": "",
+        }
 
 
 @app.get("/history")

@@ -64,6 +64,19 @@
     const input = document.getElementById('pregunta');
     const boton = document.getElementById('enviar');
 
+    // Identificador de sesión persistente (recuerda al usuario sin registro).
+    function getSessionId() {
+      let id = localStorage.getItem('agente_session');
+      if (!id) {
+        id = 'sess-' + (crypto.randomUUID
+          ? crypto.randomUUID()
+          : Date.now().toString(36) + Math.random().toString(36).slice(2));
+        localStorage.setItem('agente_session', id);
+      }
+      return id;
+    }
+    const SESSION_ID = getSessionId();
+
     function burbuja(texto, clase, fuente) {
       const wrap = document.createElement('div');
       wrap.className = 'msg ' + clase;
@@ -93,7 +106,7 @@
         const r = await fetch('/ask', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ pregunta: texto })
+          body: JSON.stringify({ pregunta: texto, session_id: SESSION_ID })
         });
         const data = await r.json();
         cargando.remove();

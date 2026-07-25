@@ -3,7 +3,8 @@
 Endpoints:
   GET  /            -> interfaz web mínima (chat)
   GET  /health      -> estado del servicio
-  POST /ask         -> responde una pregunta usando el documento como contexto
+  POST /ask         -> responde una pregunta (con memoria por sesión)
+  GET  /history     -> lista las sesiones guardadas (memoria)
   POST /reload      -> recarga el documento fuente
 """
 from __future__ import annotations
@@ -11,7 +12,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -50,11 +51,15 @@ app = FastAPI(
 # --------------------------- Modelos de datos --------------------------- #
 class PreguntaIn(BaseModel):
     pregunta: str = Field(..., min_length=1, examples=["¿Dónde puedo practicar rafting?"])
+    # Identificador de sesión generado por el frontend (sin registro). Permite
+    # "recordar" a un usuario que ya interactuó antes.
+    session_id: str = Field(default="", examples=["sess-1a2b3c"])
 
 
 class RespuestaOut(BaseModel):
     respuesta: str
     fuente: str
+    recurrente: bool = False
 
 
 # ------------------------------- Endpoints ------------------------------ #
@@ -64,30 +69,49 @@ def health() -> dict:
 
 
 @app.post("/ask", response_model=RespuestaOut)
-def ask(entrada: PreguntaIn) -> RespuestaOut:
+def ask(entrada: PreguntaIn, request: Request) -> RespuestaOut:
     if not agent.esta_listo():
         raise HTTPException(
             status_code=503,
             detail="El documento no está cargado. Verifica tu GEMINI_API_KEY y usa /reload.",
         )
+
+    session_id = entrada.session_id.strip()
+    ip = request.client.host if request.client else ""
+
+    # Memoria: ¿ya conocíamos a este usuario? y contexto de conversación previo.
+    recurrente = memory.es_recurrente(session_id) if session_id else False
+    contexto_conv = memory.construir_contexto(session_id) if session_id else ""
+
     try:
-        resultado = agent.preguntar(entrada.pregunta)
+        resultado = agent.preguntar(entrada.pregunta, contexto_conversacion=contexto_conv)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"Error al generar respuesta: {exc}")
 
-    # Persistimos la conversación (sin romper la respuesta si el guardado falla).
-    try:
-        memory.guardar(entrada.pregunta, resultado["respuesta"], resultado.get("fuente", ""))
-    except Exception as exc:  # noqa: BLE001
-        print(f"[memory] No se pudo guardar la conversación -> {exc}")
+    # Persistimos el intercambio en la memoria de la sesión (con resumen
+    # automático si supera el límite). No rompe la respuesta si el guardado falla.
+    if session_id:
+        try:
+            memory.guardar_turno(
+                session_id,
+                entrada.pregunta,
+                resultado["respuesta"],
+                ip=ip,
+                resumidor=agent.resumir,
+            )
+        except Exception as exc:  # noqa: BLE001
+            print(f"[memory] No se pudo guardar la conversación -> {exc}")
 
-    return RespuestaOut(**resultado)
+    return RespuestaOut(**resultado, recurrente=recurrente)
 
 
 @app.get("/history")
-def history(limite: int = 20) -> dict:
-    """Devuelve las últimas conversaciones guardadas (memoria)."""
-    return {"total": memory.total(), "conversaciones": memory.leer(limite=limite)}
+def history(session_id: str = "") -> dict:
+    """Sin session_id: lista todas las sesiones. Con session_id: detalle de una."""
+    if session_id:
+        return memory.cargar(session_id)
+    sesiones = memory.listar_sesiones()
+    return {"total_sesiones": len(sesiones), "sesiones": sesiones}
 
 
 @app.post("/reload")

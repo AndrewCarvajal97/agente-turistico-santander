@@ -27,8 +27,12 @@ class Settings:
     # Documento fuente
     pdf_path: str = _get("PDF_PATH", "data/guia_turistica_santander.pdf")
 
-    # Memoria de conversaciones (persistencia en archivo)
-    history_path: str = _get("HISTORY_PATH", "data/historial_conversaciones.jsonl")
+    # Memoria de conversaciones por sesión (persistencia en archivos)
+    memory_dir: str = _get("MEMORY_DIR", "data/memoria")
+    # Tamaño (en caracteres) del bloque reciente antes de resumir la memoria.
+    memory_max_chars: int = int(_get("MEMORY_MAX_CHARS", "2500") or 2500)
+    # Mínimo de intercambios recientes que se conservan siempre de forma literal.
+    memory_min_turns: int = int(_get("MEMORY_MIN_TURNS", "3") or 3)
 
     def validar(self) -> None:
         """Lanza un error claro si falta configuración esencial."""

@@ -13,8 +13,8 @@ __pycache__/
 data/index.npz
 data/*.index
 
-# Historial de conversaciones (datos generados en runtime)
-data/historial_conversaciones.jsonl
+# Memoria de conversaciones por sesión (datos generados en runtime)
+data/memoria/
 data/*.jsonl
 
 # Sistema operativo / editores

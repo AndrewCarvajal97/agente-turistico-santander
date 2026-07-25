@@ -40,17 +40,41 @@ def test_pregunta_vacia_no_llama_al_modelo():
     assert "respuesta" in resultado and "fuente" in resultado
 
 
-def test_memoria_guarda_y_lee(tmp_path):
-    ruta = tmp_path / "historial.jsonl"
-    memoria = ConversationMemory(ruta=ruta)
-    assert memoria.leer() == []
+def test_memoria_por_sesion_guarda_y_recuerda(tmp_path):
+    memoria = ConversationMemory(dir_base=tmp_path, max_chars=10_000, turnos_min=3)
+    sid = "sess-test"
+    assert memoria.es_recurrente(sid) is False
 
-    memoria.guardar("¿Capital?", "Bucaramanga", "guia.pdf")
-    memoria.guardar("¿Rafting?", "En San Gil,\nrío Fonce", "guia.pdf")  # respuesta multilínea
+    memoria.guardar_turno(sid, "¿Capital?", "Bucaramanga", ip="1.2.3.4")
+    memoria.guardar_turno(sid, "¿Rafting?", "En San Gil,\nrío Fonce")  # multilínea
 
-    registros = memoria.leer()
-    assert len(registros) == 2
-    assert memoria.total() == 2
-    assert registros[0]["pregunta"] == "¿Capital?"
-    assert registros[1]["respuesta"] == "En San Gil,\nrío Fonce"
-    assert "fecha" in registros[0]
+    assert memoria.es_recurrente(sid) is True
+    data = memoria.cargar(sid)
+    assert data["ip"] == "1.2.3.4"
+    assert len(data["turnos"]) == 2
+
+    contexto = memoria.construir_contexto(sid)
+    assert "Bucaramanga" in contexto and "San Gil" in contexto
+
+    # Otra sesión distinta no comparte memoria.
+    assert memoria.es_recurrente("otra-sesion") is False
+
+
+def test_memoria_resume_al_superar_limite(tmp_path):
+    # Límite muy bajo para forzar el resumen; resumidor simulado (sin Gemini).
+    memoria = ConversationMemory(dir_base=tmp_path, max_chars=50, turnos_min=1)
+    sid = "sess-resumen"
+    llamadas = {"n": 0}
+
+    def resumidor_fake(texto, resumen_previo):
+        llamadas["n"] += 1
+        return "RESUMEN"
+
+    for i in range(4):
+        memoria.guardar_turno(sid, f"pregunta {i}", f"respuesta larga numero {i}",
+                              resumidor=resumidor_fake)
+
+    data = memoria.cargar(sid)
+    assert data["resumen"] == "RESUMEN"       # se generó el resumen
+    assert llamadas["n"] >= 1                  # se llamó al resumidor
+    assert len(data["turnos"]) <= 2            # el bloque reciente quedó acotado

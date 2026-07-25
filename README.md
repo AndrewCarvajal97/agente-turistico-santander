@@ -157,8 +157,14 @@ servidor. Pasos resumidos:
    ```
 3. (Opcional) Contenerizar con el `Dockerfile` incluido y correr con Docker.
 
-> 🔗 **Aplicación desplegada:** _(añade aquí la URL pública, ej. `http://<IP-pública>:8000`)_
+> 🔗 **Aplicación desplegada (OCI Compute — Bogotá):** http://149.130.177.89:8000
 > 🖼️ **Captura del deploy:** ver `docs/captura-deploy.png`.
+
+**Detalles del despliegue:**
+- Región: **Colombia Central (Bogotá)** — `sa-bogota-1`
+- Compartimento: `reto-alura` &nbsp;·&nbsp; VCN: `VCN-reto-alura` (subred pública)
+- Instancia: `VM.Standard.E5.Flex` (Oracle Linux 9)
+- Servidor: `uvicorn` en el puerto `8000` (abierto en firewalld + Security List)
 
 ---
 

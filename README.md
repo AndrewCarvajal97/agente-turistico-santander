@@ -221,7 +221,8 @@ se consumen por API, por lo que basta con definir la clave del proveedor elegido
 3. (Opcional) Contenerizar con el `Dockerfile` incluido y correr con Docker.
 
 > 🔗 **Aplicación desplegada (OCI Compute — Bogotá):** http://149.130.177.89:8000
-> 🖼️ **Captura del deploy:** ver `docs/captura-deploy.png`.
+> 🖼️ **Evidencia del despliegue:** capturas de la consola de OCI y de la app en
+> ejecución, en la carpeta [`docs/`](docs/).
 
 **Detalles del despliegue:**
 - Región: **Colombia Central (Bogotá)** — `sa-bogota-1`

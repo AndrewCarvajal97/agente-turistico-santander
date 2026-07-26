@@ -142,13 +142,20 @@ def busca_web(consulta: str) -> str:
 
     def _run() -> str:
         try:
+            from datetime import date
+
             from langchain_tavily import TavilySearch
 
             buscador = TavilySearch(
                 max_results=3, tavily_api_key=settings.tavily_api_key, topic="general"
             )
-            # Enfoca la búsqueda en el contexto del proyecto para resultados más útiles.
-            datos = buscador.invoke({"query": f"{consulta} en Santander, Colombia"})
+            # Enfoca la búsqueda en el proyecto e incluye la FECHA ACTUAL para que las
+            # consultas de "hoy"/"este fin de semana" traigan info reciente (no desactualizada).
+            # Se calcula en cada llamada, así nunca queda vieja aunque el server lleve días arriba.
+            fecha_hoy = date.today().strftime("%d/%m/%Y")
+            datos = buscador.invoke(
+                {"query": f"{consulta} en Santander, Colombia (información al {fecha_hoy})"}
+            )
             resultados = datos.get("results", []) if isinstance(datos, dict) else (datos or [])
             if not resultados:
                 return "No encontré resultados web para esa consulta."

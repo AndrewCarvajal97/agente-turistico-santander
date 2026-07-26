@@ -289,6 +289,15 @@ El backend de la base vectorial se elige con `RAG_VECTORSTORE`, sin tocar el res
 Al **agregar o quitar PDFs**, `POST /rag/reindex` (protegido con `ADMIN_KEY`) reconstruye el
 índice (`forzar=True`) para que tome los documentos actuales.
 
+### 🔁 Multi-query (RAG avanzado, opcional)
+
+Con `RAG_MULTIQUERY=true`, una LLM **reescribe la pregunta en varias versiones** (`RAG_MULTIQUERY_N`)
+antes de buscar; se recuperan los chunks de **todas** las variantes y se **unen sin duplicados**.
+Esto mejora el *recall* y supera las limitaciones de la búsqueda por distancia (una pregunta mal
+delimitada encuentra igual el contexto). Es **opt-in** (suma una llamada al LLM por consulta) y
+**degrada con elegancia**: si la generación de variantes falla, usa la pregunta original. Mantiene
+intactas las citaciones y el chequeo "No lo sé".
+
 ### 🔭 Observabilidad con LangSmith (opcional)
 
 El proyecto es compatible con **LangSmith** para *tracing*: ver cada paso de las cadenas

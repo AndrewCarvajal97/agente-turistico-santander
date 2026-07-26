@@ -60,6 +60,10 @@ class Settings:
     rag_top_k: int = int(_get("RAG_TOP_K", "4") or 4)
     # Umbral mínimo de similitud (0-1) para considerar un fragmento relevante.
     rag_score_threshold: float = float(_get("RAG_SCORE_THRESHOLD", "0.3") or 0.3)
+    # Multi-query (RAG avanzado, opt-in): reescribe la pregunta en varias versiones y
+    # une los documentos recuperados. Mejora el recall a costa de una llamada extra al LLM.
+    rag_multiquery: bool = _get("RAG_MULTIQUERY", "false").lower() == "true"
+    rag_multiquery_n: int = int(_get("RAG_MULTIQUERY_N", "3") or 3)
 
     # --- Pinecone (base vectorial en la nube, RAG_VECTORSTORE=pinecone) ---
     pinecone_api_key: str = _get("PINECONE_API_KEY")

@@ -29,6 +29,16 @@ SYSTEM_PROMPT_RAG = (
     "Si la respuesta no está en el contexto, responde exactamente 'No lo sé'."
 )
 
+# Multi-query (RAG avanzado): una LLM reescribe la pregunta en varias versiones para
+# recuperar más documentos relevantes y superar los límites de la búsqueda por distancia.
+MULTIQUERY_TEMPLATE = (
+    "Eres un asistente de IA. Genera {n} versiones diferentes de la siguiente pregunta del "
+    "usuario para recuperar documentos relevantes de una base de datos vectorial. Al ofrecer "
+    "múltiples perspectivas, ayudas a superar las limitaciones de la búsqueda por similitud. "
+    "Devuelve SOLO las preguntas, una por línea, sin numeración ni comillas ni texto extra.\n\n"
+    "Pregunta original: {pregunta}"
+)
+
 
 class RagSantander:
     """Base vectorial (FAISS o Pinecone) de los documentos y recuperación semántica."""
@@ -206,6 +216,48 @@ class RagSantander:
     def _no_encontrado(respuesta: str = "No lo sé.") -> dict:
         return {"respuesta": respuesta, "citaciones": [], "documentos_encontrados": False}
 
+    def _generar_consultas(self, pregunta: str) -> list[str]:
+        """Multi-query: genera variantes de la pregunta con la LLM (incluye la original).
+
+        Si la generación falla (p. ej. sin cupo), degrada con elegancia a la pregunta
+        original, para que el RAG nunca se caiga por esta mejora opcional.
+        """
+        from langchain_core.output_parsers import StrOutputParser
+        from langchain_core.prompts import PromptTemplate
+
+        plantilla = PromptTemplate.from_template(MULTIQUERY_TEMPLATE)
+        cadena = plantilla | llm.construir_chat_model(temperature=0.4) | StrOutputParser()
+        try:
+            salida = cadena.invoke(
+                {"pregunta": pregunta, "n": settings.rag_multiquery_n}
+            )
+        except Exception:  # noqa: BLE001 - cualquier fallo degrada a consulta simple
+            return [pregunta]
+        variantes = [
+            linea.strip(" -*\"'[]") for linea in salida.splitlines() if linea.strip()
+        ]
+        variantes = [v for v in variantes if v and v.lower() != pregunta.lower()]
+        return [pregunta] + variantes[: settings.rag_multiquery_n]
+
+    def _recuperar(self, pregunta: str):
+        """Recupera documentos; con multi-query, une (dedup) los de todas las variantes."""
+        consultas = [pregunta]
+        if settings.rag_multiquery:
+            consultas = self._generar_consultas(pregunta)
+
+        vistos, documentos = set(), []
+        for consulta in consultas:
+            for d in self.retriever.invoke(consulta):
+                clave = (
+                    d.metadata.get("source"),
+                    d.metadata.get("page"),
+                    d.page_content[:80],
+                )
+                if clave not in vistos:
+                    vistos.add(clave)
+                    documentos.append(d)
+        return documentos
+
     def preguntar(self, pregunta: str) -> dict:
         """Recupera los chunks relevantes y genera la respuesta con citaciones.
 
@@ -219,8 +271,8 @@ class RagSantander:
         if not pregunta:
             return self._no_encontrado("Por favor, escribe una pregunta.")
 
-        # 1) Recuperación: si nada supera el umbral, respondemos "No lo sé".
-        documentos = self.retriever.invoke(pregunta)
+        # 1) Recuperación (multi-query opcional): si nada supera el umbral -> "No lo sé".
+        documentos = self._recuperar(pregunta)
         if not documentos:
             return self._no_encontrado()
 

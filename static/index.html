@@ -98,14 +98,16 @@
     .iconbtn:hover{background:rgba(255,255,255,.14)}
 
     /* Selector de fase */
-    .fases{display:flex;gap:6px;padding:10px 16px;border-bottom:1px solid var(--line);background:rgba(10,16,22,.4)}
-    .fase{flex:1;display:flex;align-items:center;justify-content:center;gap:9px;padding:9px;border-radius:11px;cursor:pointer;
+    .fases{display:flex;flex-wrap:wrap;gap:6px;padding:10px 16px;border-bottom:1px solid var(--line);background:rgba(10,16,22,.4)}
+    .fase{flex:1 1 145px;min-width:145px;display:flex;align-items:center;justify-content:center;gap:9px;padding:9px;border-radius:11px;cursor:pointer;
           background:var(--panel-2);border:1px solid var(--line);color:var(--muted);font:inherit;transition:all .15s}
     .fase b{font-size:.82rem;color:var(--ink)}
     .fase small{font-size:.66rem;display:block;color:var(--muted)}
     .fase.on{border-color:transparent;background:linear-gradient(135deg,var(--green-d),var(--green))}
     .fase.on.rag{background:linear-gradient(135deg,var(--red-d),var(--red))}
     .fase.on.web{background:linear-gradient(135deg,#e6b800,var(--yellow))}
+    .fase.on.grafo{background:linear-gradient(135deg,#5b46b0,#7c66d6)}
+    .fase.on.itin{background:linear-gradient(135deg,#0a7d6c,#12b39a)}
     .fase.on b,.fase.on small{color:#fff}
     .fase.on.web b,.fase.on.web small{color:#241a00}
 
@@ -303,6 +305,8 @@
         <button class="fase on" data-modo="ask" role="tab" aria-selected="true">🧭 <span><b>Contexto completo</b><small>respuesta directa</small></span></button>
         <button class="fase rag" data-modo="rag" role="tab" aria-selected="false">🔎 <span><b>RAG · base vectorial</b><small>con citas de fuente</small></span></button>
         <button class="fase web" data-modo="web" role="tab" aria-selected="false">🌐 <span><b>Guía + Web</b><small>info actual con fuentes</small></span></button>
+        <button class="fase grafo" data-modo="grafo" role="tab" aria-selected="false">🕸️ <span><b>Grafo · triaje</b><small>clasifica y enruta</small></span></button>
+        <button class="fase itin" data-modo="itin" role="tab" aria-selected="false">🧳 <span><b>Itinerario</b><small>plan de viaje</small></span></button>
       </div>
 
       <div id="msgs" role="log" aria-live="polite" aria-label="Conversación con Santy">
@@ -332,8 +336,6 @@
         <div class="subacts">
           <button class="subact" onclick="document.getElementById('img').click()">📷 Identificar por foto</button>
           <input type="file" id="img" accept="image/*" style="display:none" />
-          <button class="subact" onclick="generarItinerario()" title="Genera un itinerario de viaje (multiagente: plan → investigar → redactar)">🧳 Generar itinerario</button>
-          <button class="subact" onclick="grafoTriaje()" title="Agente con grafo de estados: clasifica (triaje) y responde vía RAG / pedir info / ticket">🕸️ Grafo (triaje)</button>
           <button class="subact" onclick="adminAnalisis()">🔐 Análisis de conversaciones</button>
         </div>
         <div id="voice"><span style="width:9px;height:9px;border-radius:50%;background:var(--red);display:inline-block;animation:breathe .8s infinite"></span> Escuchando… habla ahora.</div>
@@ -391,7 +393,13 @@
         tec:'Técnica: embeddings Cohere + base vectorial FAISS + citas trazables con filtro de relevancia.'},
       web:{t:'🌐 Guía + Web',
         d:'Combino la guía (lo estático) con información ACTUAL de internet: eventos, ferias, clima y precios de hoy, siempre citando las fuentes.',
-        tec:'Técnica: grafo LangGraph (router → guía / web / ambas → supervisor) + búsqueda web Tavily.'}
+        tec:'Técnica: grafo LangGraph (router → guía / web / ambas → supervisor) + búsqueda web Tavily.'},
+      grafo:{t:'🕸️ Grafo · triaje',
+        d:'Clasifico tu consulta (triaje) y la enruto: resolver con la guía (RAG), pedir más info o abrir un "ticket". Escribe tu consulta y envía.',
+        tec:'Técnica: grafo de estados LangGraph (StateGraph) con salida estructurada (Literal) y aristas condicionales.'},
+      itin:{t:'🧳 Itinerario',
+        d:'Describe tu viaje (ej. "un fin de semana de aventura en San Gil") y te armo un itinerario por días. Tarda unos segundos (es multiagente).',
+        tec:'Técnica: multiagente LangGraph (plan → investigar web+guía → redactar → reflexionar), con loop de revisión.'}
     };
     function introFase(modo){const{bub,wrap}=fila('bot');
       const info=FASE_INFO[modo]||FASE_INFO.ask;
@@ -491,6 +499,8 @@
     async function preguntar(t){
       msgUser(t); input.value=''; send.disabled=true;
       if(modo==='web'){ try{await preguntarWeb(t);} finally{send.disabled=false;input.focus();} return; }
+      if(modo==='grafo'){ try{await preguntarGrafo(t);} finally{send.disabled=false;input.focus();} return; }
+      if(modo==='itin'){ try{await preguntarItin(t);} finally{send.disabled=false;input.focus();} return; }
       const load=cargando(); const fase=modo==='rag'?'rag':'ctx';
       let bot=null, acum='', fin=null;
       const quitarCarga=()=>{if(load&&load.parentNode)load.remove();};
@@ -577,11 +587,8 @@
     function clearChat(){box.innerHTML='';msgBot('Conversación reiniciada. ¿En qué te ayudo sobre Santander?');}
 
     /* Admin: análisis de conversaciones */
-    /* Itinerario multiagente (/itinerario): plan → investigar (web+guía) → redactar → revisar. */
-    async function generarItinerario(){
-      let t=input.value.trim();
-      if(!t){t=prompt('¿Qué viaje quieres planear en Santander?','un fin de semana de aventura en San Gil');if(!t)return;}
-      msgUser('🧳 Itinerario: '+t); input.value='';
+    /* Fase Itinerario (/itinerario): plan → investigar (web+guía) → redactar → revisar. */
+    async function preguntarItin(t){
       const load=cargandoTxt('Armando tu itinerario (plan → investigar → redactar)…','<span class="badge itin">🧳 Itinerario</span>');
       try{
         const r=await fetch('/itinerario',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pregunta:t,session_id:SESSION_ID})});
@@ -598,11 +605,8 @@
       }catch(e){if(load&&load.parentNode)load.remove();msgBot('⚠️ No se pudo conectar con el servidor.');}
     }
 
-    /* Agente con grafo de estados (/grafo/ask): triaje → RAG / pedir info / abrir ticket. */
-    async function grafoTriaje(){
-      let t=input.value.trim();
-      if(!t){t=prompt('Consulta para el grafo de estados (triaje):','quiero reservar un tour por el Cañón del Chicamocha');if(!t)return;}
-      msgUser(t); input.value='';
+    /* Fase Grafo de estados (/grafo/ask): triaje → RAG / pedir info / abrir ticket. */
+    async function preguntarGrafo(t){
       const load=cargandoTxt('Clasificando (triaje) y respondiendo…','<span class="badge grafo">🕸️ Grafo · triaje</span>');
       try{
         const r=await fetch('/grafo/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pregunta:t,session_id:SESSION_ID})});

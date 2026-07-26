@@ -19,9 +19,25 @@ expone está protegido con ADMIN_KEY y NO debería abrirse al público sin un sa
 from __future__ import annotations
 
 import re
+from typing import Literal
 
 from . import llm
 from .config import settings
+
+# Catálogo de herramientas para el router: describe cuándo usar cada una (como las
+# descripciones de las Tool del curso), para que el agente elija la adecuada.
+SYSTEM_ROUTER = (
+    "Eres un enrutador de herramientas de análisis de datos sobre un DataFrame. Según la "
+    "solicitud del usuario, elige EXACTAMENTE una herramienta:\n"
+    "- explorar: panorama general del DataFrame (nº de filas/columnas, tipos, nulos, "
+    "duplicados). Ej.: 'dame información general', 'describe el dataset'.\n"
+    "- estadisticas: resumen estadístico descriptivo COMPLETO (media, desviación, min, "
+    "max, cuartiles de varias columnas). Ej.: 'muéstrame la estadística descriptiva'.\n"
+    "- grafico: cuando pide una VISUALIZACIÓN. Ej.: 'crea un gráfico', 'plotea', "
+    "'visualiza', 'muestra la distribución de...'.\n"
+    "- pregunta: cálculos o consultas PUNTUALES (un promedio, un conteo, una correlación, "
+    "un filtro, un top-N). Ej.: '¿cuántas consultas por sesión?', '¿cuál es el promedio de X?'."
+)
 
 SYSTEM_CODIGO = (
     "Tienes acceso a un dataframe pandas llamado `df` (pandas ya está importado como pd).\n"
@@ -340,6 +356,52 @@ class AgenteDatos:
         ).invoke({"pregunta": pregunta, "codigo": codigo, "resultado": resultado})
 
         return {"codigo": codigo, "resultado": resultado, "respuesta": respuesta.strip()}
+
+
+    # ------------------------------------------------------------------ #
+    # Router / catálogo de herramientas (cierre del curso): el agente elige
+    # sola qué herramienta usar según la solicitud. En vez del ReAct de
+    # string-parsing (frágil), clasificamos con salida estructurada (Literal),
+    # como el triaje del grafo — determinista y con respaldo de proveedores.
+    # ------------------------------------------------------------------ #
+    def _clasificar(self, pregunta: str) -> str:
+        """Elige la herramienta: explorar | estadisticas | grafico | pregunta."""
+        from pydantic import BaseModel, Field
+
+        class RutaDatos(BaseModel):
+            herramienta: Literal["explorar", "estadisticas", "grafico", "pregunta"] = Field(
+                description="La herramienta que mejor atiende la solicitud del usuario"
+            )
+
+        disponibles = self._modelo_ids()
+        if not disponibles:
+            return "pregunta"
+        modelos = [
+            llm._construir_modelo(p, m, temperature=0).with_structured_output(RutaDatos)
+            for p, m in disponibles
+        ]
+        router = modelos[0].with_fallbacks(modelos[1:]) if len(modelos) > 1 else modelos[0]
+        try:
+            ruta = router.invoke(
+                [("system", SYSTEM_ROUTER), ("human", pregunta)]
+            )
+            return ruta.herramienta
+        except Exception:  # noqa: BLE001 - ante cualquier fallo, cálculo puntual
+            return "pregunta"
+
+    def responder(self, df, pregunta: str) -> dict:
+        """Punto de entrada del agente: enruta a la herramienta adecuada y ejecuta."""
+        pregunta = (pregunta or "").strip()
+        if not pregunta:
+            return {"herramienta": "pregunta", "respuesta": "Escribe una pregunta sobre los datos."}
+        herramienta = self._clasificar(pregunta)
+        if herramienta == "explorar":
+            return {"herramienta": "explorar", "respuesta": self.reporte_general(df)}
+        if herramienta == "estadisticas":
+            return {"herramienta": "estadisticas", "respuesta": self.reporte_estadistico(df)}
+        if herramienta == "grafico":
+            return {"herramienta": "grafico", **self.generar_grafico(df, pregunta)}
+        return {"herramienta": "pregunta", **self.analizar(df, pregunta)}
 
 
 # Instancia única reutilizable (sin estado propio; el df se pasa en cada llamada).

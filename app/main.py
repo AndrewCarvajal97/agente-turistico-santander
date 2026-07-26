@@ -267,6 +267,7 @@ async def datos_analizar(
     puede subir otro CSV en `file` para analizarlo.
 
     Acciones (herramientas personalizadas):
+      - "auto"         -> el agente-router ELIGE la herramienta según la `pregunta`
       - "explorar"     -> reporte de información general del DataFrame
       - "estadisticas" -> informe de estadísticas descriptivas
       - "grafico"      -> genera un gráfico (matplotlib/seaborn) y lo devuelve en base64
@@ -305,6 +306,8 @@ async def datos_analizar(
             )
 
         base = {"fuente": fuente}
+        if accion == "auto":
+            return {**base, "tipo": "auto", **agente_datos.responder(df, pregunta)}
         if accion == "explorar":
             return {**base, "tipo": "explorar", "respuesta": agente_datos.reporte_general(df)}
         if accion == "estadisticas":

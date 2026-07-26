@@ -18,7 +18,7 @@ def _get(nombre: str, por_defecto: str = "") -> str:
 class Settings:
     """Configuración inmutable de la aplicación."""
 
-    # Proveedor de LLM: "gemini" o "groq"
+    # Proveedor de LLM: "gemini", "groq" o "cohere"
     llm_provider: str = _get("LLM_PROVIDER", "gemini")
 
     # --- Google Gemini ---

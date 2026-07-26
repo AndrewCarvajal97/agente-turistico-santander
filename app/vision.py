@@ -2,8 +2,8 @@
 
 Aplica LCEL: una cadena `plantilla | modelo | parser`. Aquí el parser es un
 `JsonOutputParser` validado con un modelo **Pydantic**, de modo que la salida sea
-un **JSON estructurado** (descripción + etiquetas + relación con Santander), más
-fácil de integrar en una app que un texto libre.
+un **JSON estructurado** (título + descripción + etiquetas + relación con Santander),
+más fácil de integrar en una app que un texto libre.
 
 Como se vio en el curso, **solo Gemini** hace visión en esta configuración
 (Groq/Cohere son de texto), así que se usa `ChatGoogleGenerativeAI`. La imagen se
@@ -56,7 +56,7 @@ def _modelo():
 
 
 def analizar_imagen(imagen_b64: str, mime: str = "image/jpeg", pregunta: str = "") -> dict:
-    """Analiza una imagen y devuelve un dict {descripcion, etiquetas, relacion_santander}."""
+    """Analiza una imagen y devuelve un dict {titulo, descripcion, etiquetas, relacion_santander}."""
     from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
     from langchain_core.prompts import ChatPromptTemplate
 

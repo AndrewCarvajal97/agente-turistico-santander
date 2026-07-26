@@ -1,13 +1,12 @@
-"""Orquestación del agente.
+"""Orquestación del agente de preguntas y respuestas.
 
 Estrategia: **inyección de contexto completo**. Como el documento fuente es
 pequeño, en lugar de usar recuperación por embeddings se entrega el texto
-completo del PDF como contexto a Gemini en cada pregunta.
+completo del PDF como contexto al LLM en cada pregunta.
 
 Además, el agente puede recibir el **contexto de conversación** de la sesión
-(memoria) para "recordar" a un usuario que ya interactuó antes, y expone un
-método `resumir()` que la memoria usa para comprimir el historial y no consumir
-demasiados tokens.
+(memoria) para "recordar" a un usuario que ya interactuó antes. La llamada al
+modelo se delega a `app.llm`, que elige el proveedor y aplica el respaldo.
 """
 from __future__ import annotations
 
@@ -56,7 +55,7 @@ class TourismAgent:
 
         Args:
             pregunta: la pregunta del usuario.
-            contexto_conversacion: memoria de la sesión (resumen + últimos turnos).
+            contexto_conversacion: memoria de la sesión (últimos intercambios).
 
         Returns:
             {"respuesta": str, "fuente": str}
@@ -85,5 +84,5 @@ class TourismAgent:
     def _llamar_modelo(
         self, mensaje: str, system_instruction: str, max_tokens: int = 2048
     ) -> str:
-        """Genera texto con el proveedor de LLM configurado (Gemini o Groq)."""
+        """Genera texto con el proveedor de LLM configurado (Gemini, Groq o Cohere)."""
         return llm.generar_texto(mensaje, system_instruction, max_tokens)

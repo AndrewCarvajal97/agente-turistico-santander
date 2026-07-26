@@ -3,12 +3,13 @@
 Usa los chat models de LangChain (`ChatGroq`, `ChatGoogleGenerativeAI`), plantillas
 de prompt (`ChatPromptTemplate`) y cadenas **LCEL** (`prompt | modelo | parser`).
 
-Permite responder con **Google Gemini** o con **Groq** (modelos open source como
-Llama o Gemma) según `LLM_PROVIDER`. Además, aplica una **estrategia de respaldo**:
-si un modelo/proveedor se queda sin cupo (error 429) o falla, se intenta con el
-siguiente candidato de la cadena, sin romper la experiencia del usuario:
+Permite responder con **Gemini**, **Groq** (Llama/Gemma) o **Cohere** según
+`LLM_PROVIDER`. Además, aplica una **estrategia de respaldo**: si un modelo/proveedor
+se queda sin cupo (error 429) o falla, se intenta con el siguiente candidato de la
+cadena (primero el proveedor activo con sus modelos, luego los demás que tengan
+API key), sin romper la experiencia del usuario. Por ejemplo, con Groq activo:
 
-    [modelo Groq configurado] -> [otro modelo Groq] -> [Gemini] -> (sin cupo)
+    [Groq 70b] -> [Groq 8b] -> [Groq gemma] -> [Gemini] -> [Cohere] -> (sin cupo)
 
 Cada modelo de Groq tiene su propia cuota diaria, así que probar otro modelo suele
 resolver el agotamiento de tokens. Si TODOS los candidatos fallan, se lanza

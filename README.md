@@ -2,8 +2,10 @@
 
 Agente de inteligencia artificial que responde preguntas sobre los **sitios turísticos
 del departamento de Santander, Colombia**, a partir del contenido de un documento PDF.
-Usa **Google Gemini** como modelo de lenguaje, está expuesto mediante una **API con FastAPI**
-con una interfaz web de chat, y se despliega en **Oracle Cloud Infrastructure (OCI Compute)**.
+Está orquestado con **LangChain** y puede usar varios modelos de lenguaje (**Gemini**,
+**Groq** o **Cohere**) con respaldo automático entre ellos. Se expone mediante una **API con
+FastAPI** con interfaz web de chat, incluye **análisis de imágenes** (Gemini visión) y un
+**agente con herramientas**, y se despliega en **Oracle Cloud Infrastructure (OCI Compute)**.
 
 > Proyecto desarrollado para el **Challenge Alura Agente**.
 
@@ -17,43 +19,44 @@ PDF, sin necesidad de abrir el documento.
 
 **Estrategia: inyección de contexto completo.** Como el documento fuente es pequeño (una guía
 de 5 páginas), el agente entrega el **texto completo del PDF como contexto** al modelo en cada
-pregunta. Aprovechando la amplia ventana de contexto de Gemini, esto resulta más simple,
-preciso y económico que un pipeline de embeddings para un documento de este tamaño, y evita
-que el modelo invente información fuera del documento.
+pregunta. Aprovechando la amplia ventana de contexto de los LLM actuales, esto resulta más
+simple, preciso y económico que un pipeline de embeddings para un documento de este tamaño, y
+evita que el modelo invente información fuera del documento.
 
 ---
 
 ## 🏗️ Arquitectura de la solución
 
 ```
-                       ┌──────────────────────────────┐
-   Usuario  ──HTTP──▶  │        FastAPI (app)         │
- (navegador / API)     │                              │
-                       │   GET  /        (chat web)   │
-                       │   POST /ask     (pregunta)   │
-                       │   GET  /health               │
-                       └───────────────┬──────────────┘
-                                       │
-              ┌────────────────────────┼─────────────────────────┐
-              ▼ (al iniciar, 1 vez)    ▼ (por cada pregunta)      │
-      ┌───────────────┐        ┌────────────────────┐            │
-      │  PDF Loader   │───────▶│  Documento en      │            │
-      │  (pypdf)      │ texto  │  memoria (contexto)│◀───────────┘
-      └───────────────┘        └─────────┬──────────┘
-                                         │ contexto + pregunta
-                                         ▼
-                               ┌────────────────────┐
-                               │   Google Gemini    │
-                               │   (gemini-flash)   │
-                               └─────────┬──────────┘
-                                         ▼
-                                Respuesta en lenguaje natural
+                          ┌─────────────────────────────────────────┐
+   Usuario  ──HTTP──────▶ │              FastAPI (app)               │
+ (navegador / API)        │  /  /ask  /vision  /history  /admin  /agente │
+                          └───────┬───────────────┬─────────────────┘
+                                  │               │
+              ┌───────────────────┘               └───────────────┐
+              ▼                                                    ▼
+   ┌────────────────────┐   PDF (contexto)        ┌───────────────────────────┐
+   │  Agente Q&A        │◀────── PDF Loader        │   Memoria (CSV + pandas)  │
+   │  (contexto completo)│       (pypdf)           │   filtro por session_id   │
+   └─────────┬──────────┘                          └───────────────────────────┘
+             │  prompt (documento + memoria + pregunta)
+             ▼
+   ┌──────────────────────────────────────────────────────────────┐
+   │   Capa LLM (LangChain, LCEL)  — estrategia de respaldo         │
+   │   Groq (Llama/Gemma)  →  Gemini  →  Cohere    (según cupo)     │
+   └──────────────────────────────────────────────────────────────┘
+             │
+             ▼
+     Respuesta en lenguaje natural
+
+  Extras:  /vision → Gemini multimodal (JSON estructurado)
+           /agente → agente ReAct (LangGraph) que elige herramientas
 ```
 
 **Flujo:**
 1. **Al iniciar:** se lee el PDF y su texto queda cargado en memoria como contexto.
-2. **Por cada pregunta:** se envía a Gemini el documento + la pregunta, con instrucciones de
-   responder únicamente con base en el documento.
+2. **Por cada pregunta:** se arma el prompt (documento + memoria + pregunta) y se envía a la
+   capa LLM (LangChain), que elige el proveedor y aplica el respaldo si uno se queda sin cupo.
 3. **Memoria por sesión (CSV + pandas):** cada usuario se identifica con un `session_id`
    generado en el frontend (sin registro). Cada intercambio se guarda como una fila en
    `data/historial.csv`. **Antes de responder**, el sistema lee el CSV y **filtra por
@@ -76,7 +79,7 @@ que el modelo invente información fuera del documento.
 alura-latam/
 ├── app/
 │   ├── main.py          # API FastAPI (endpoints + interfaz)
-│   ├── agent.py         # Lógica del agente (carga del PDF + generación con Gemini)
+│   ├── agent.py         # Lógica del agente Q&A (carga del PDF + llamada al LLM)
 │   ├── pdf_loader.py    # Lectura y limpieza del texto del PDF
 │   ├── memory.py        # Memoria de conversaciones en CSV (pandas + filtros)
 │   ├── analytics.py     # Análisis de conversaciones (pandas + LLM + JSON)
@@ -120,8 +123,11 @@ alura-latam/
 
 ### 1. Requisitos previos
 - Python 3.11 o superior.
-- Una **API key de Google Gemini** (gratuita, nivel *free tier*), que se obtiene en
-  [Google AI Studio](https://aistudio.google.com/app/apikey).
+- Una **API key gratuita** de al menos un proveedor de LLM (puedes usar los tres y el sistema
+  alterna entre ellos):
+  - **Google Gemini** — [Google AI Studio](https://aistudio.google.com/app/apikey) (requerido para la visión).
+  - **Groq** — [console.groq.com/keys](https://console.groq.com/keys) (rápido, free tier generoso).
+  - **Cohere** — [dashboard.cohere.com/api-keys](https://dashboard.cohere.com/api-keys) (fuerte en español).
 
 ### 2. Clonar e instalar dependencias
 ```bash
@@ -170,18 +176,18 @@ python -m pytest -q
 
 ## ☁️ Despliegue en OCI
 
-El agente se despliega en una **instancia Compute** de OCI (una VM). El modelo de lenguaje
-(Google Gemini) se consume por API, por lo que basta con definir la `GEMINI_API_KEY` en el
-servidor. Pasos resumidos:
+El agente se despliega en una **instancia Compute** de OCI (una VM). Los modelos de lenguaje
+se consumen por API, por lo que basta con definir la clave del proveedor elegido (p. ej.
+`GEMINI_API_KEY`, `GROQ_API_KEY` o `COHERE_API_KEY`) en el `.env` del servidor. Pasos resumidos:
 
-1. Crear la VM (Ubuntu 22.04) y abrir el puerto `8000` en la *Security List* / *NSG*.
+1. Crear la VM (Oracle Linux / Ubuntu) y abrir el puerto `8000` en la *Security List* / *NSG*.
 2. Conectarse por SSH y preparar el entorno:
    ```bash
    git clone https://github.com/AndrewCarvajal97/agente-turistico-santander.git
    cd agente-turistico-santander
    python3 -m venv venv && source venv/bin/activate
    pip install -r requirements.txt
-   cp .env.example .env          # edita .env y coloca tu GEMINI_API_KEY
+   cp .env.example .env          # edita .env y coloca la API key de tu proveedor
    uvicorn app.main:app --host 0.0.0.0 --port 8000
    ```
 3. (Opcional) Contenerizar con el `Dockerfile` incluido y correr con Docker.
@@ -225,7 +231,7 @@ servidor. Pasos resumidos:
 > Monumento Nacional. Destaca por su arquitectura colonial: calles empedradas y casas blancas
 > de tapia pisada.
 
-_(Las respuestas se generan dinámicamente con Google Gemini a partir del PDF fuente.)_
+_(Las respuestas se generan dinámicamente con el LLM configurado, a partir del PDF fuente.)_
 
 ---
 

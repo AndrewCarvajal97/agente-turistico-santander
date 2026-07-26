@@ -1,11 +1,14 @@
 """API FastAPI del agente turístico de Santander.
 
 Endpoints:
-  GET  /            -> interfaz web mínima (chat)
-  GET  /health      -> estado del servicio
-  POST /ask         -> responde una pregunta (con memoria por sesión)
-  GET  /history     -> lista las sesiones guardadas (memoria)
-  POST /reload      -> recarga el documento fuente
+  GET  /               -> interfaz web mínima (chat)
+  GET  /health         -> estado del servicio
+  POST /ask            -> responde una pregunta (con memoria por sesión)
+  POST /vision         -> analiza una imagen (Gemini visión)
+  GET  /history        -> lista/busca las conversaciones guardadas
+  POST /admin/analisis -> categoriza las preguntas (admin, requiere clave)
+  POST /agente         -> agente orquestador ReAct (LangGraph, paralelo)
+  POST /reload         -> recarga el documento fuente
 """
 from __future__ import annotations
 
@@ -56,8 +59,9 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Agente Turístico de Santander",
-    description="Agente IA que responde preguntas sobre turismo en Santander, "
-    "Colombia, usando Google Gemini con el documento como contexto.",
+    description="Agente IA sobre turismo en Santander, Colombia. Usa LangChain con "
+    "múltiples proveedores de LLM (Gemini, Groq, Cohere), visión con Gemini y un "
+    "agente orquestador con herramientas.",
     version="1.0.0",
     lifespan=lifespan,
 )

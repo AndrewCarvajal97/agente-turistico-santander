@@ -9,14 +9,12 @@ __pycache__/
 .env
 *.pem
 
-# Índice vectorial generado
-data/index.npz
-data/*.index
-
 # Memoria de conversaciones (datos generados en runtime)
 data/historial.csv
-data/memoria/
-data/*.jsonl
+
+# Índice vectorial (por si se agrega RAG con embeddings)
+data/index.npz
+data/*.index
 
 # Sistema operativo / editores
 .DS_Store

@@ -65,9 +65,15 @@ def analizar(memory: ConversationMemory) -> dict:
 
     texto = llm.generar_texto(prompt, SYSTEM_ANALISIS, max_tokens=2048)
     detalle = _parsear_json(texto)
+    if not isinstance(detalle, list):  # el modelo debe devolver una lista de objetos
+        detalle = []
 
     # Contamos cuántas preguntas hay por categoría (Counter).
-    conteo = Counter(str(item.get("categoria", "general")).lower() for item in detalle)
+    conteo = Counter(
+        str(item.get("categoria", "general")).lower()
+        for item in detalle
+        if isinstance(item, dict)
+    )
     categorias = [
         {"categoria": cat, "cantidad": n} for cat, n in conteo.most_common()
     ]

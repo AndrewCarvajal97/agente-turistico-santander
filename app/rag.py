@@ -36,9 +36,14 @@ def _terminos(texto: str) -> set:
     return {t for t in re.findall(r"[a-záéíóúñü]{5,}", (texto or "").lower())} - _PALABRAS_COMUNES
 
 SYSTEM_PROMPT_RAG = (
-    "Eres un asistente turístico experto en Santander, Colombia. Responde en español, de "
-    "forma clara y concisa, ÚNICAMENTE con la información del contexto proporcionado. "
-    "Si la respuesta no está en el contexto, responde exactamente 'No lo sé'."
+    "Eres un guía turístico experto y amable de Santander, Colombia. Responde en español, "
+    "de forma clara y concisa. Para los DATOS CONCRETOS de Santander (lugares, actividades, "
+    "gastronomía, rutas) básate en el contexto proporcionado. Puedes complementar con "
+    "consejos prácticos de viaje y sentido común (p. ej. qué calzado usar para caminar, cómo "
+    "prepararse para acampar o hacer senderismo) aunque no estén textualmente en el contexto. "
+    "No inventes datos específicos (precios, horarios, lugares concretos) que no estén en el "
+    "contexto. Responde exactamente 'No lo sé' SOLO cuando te pidan un dato ESPECÍFICO de "
+    "Santander que no esté en el contexto y que no puedas cubrir con un consejo general útil."
 )
 
 # Multi-query (RAG avanzado): una LLM reescribe la pregunta en varias versiones para

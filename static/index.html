@@ -172,14 +172,21 @@
 
     footer{position:relative;z-index:10;text-align:center;color:var(--muted);font-size:.72rem;padding:10px 16px 18px}
 
-    /* Alto contraste */
-    body.hc{background:#000 !important;color:#ff0 !important}
-    body.hc .glass,body.hc .card,body.hc .box,body.hc .chatwrap,body.hc #input,body.hc .destino,
-    body.hc .fase,body.hc .qchip,body.hc .tbtn,body.hc .iconbtn,body.hc .subact{
+    /* Alto contraste — negro + texto BLANCO legible; amarillo solo en controles,
+       cian para acentos/activos. Menos "ruido" que bordes amarillos en todo. */
+    body.hc{background:#000 !important;color:#fff !important}
+    body.hc .glass,body.hc .card,body.hc .box,body.hc .chatwrap,body.hc .destino{
+      background:#000 !important;border:1px solid #fff !important;box-shadow:none !important;backdrop-filter:none !important}
+    body.hc #input,body.hc .fase,body.hc .qchip,body.hc .tbtn,body.hc .iconbtn,body.hc .subact,body.hc .mic{
       background:#000 !important;border:2px solid #ff0 !important;color:#ff0 !important;box-shadow:none !important;backdrop-filter:none !important}
-    body.hc .muted,body.hc .desc,body.hc small,body.hc p,body.hc .name{color:#ff0 !important}
+    body.hc .bub{background:#111 !important;border:1px solid #fff !important;color:#fff !important}
+    body.hc .muted,body.hc .desc,body.hc small,body.hc p,body.hc .name,body.hc .about{color:#fff !important}
+    body.hc a,body.hc .wline a{color:#0ff !important}
     body.hc .orb,body.hc .mtns{display:none}
-    body.hc .send,body.hc .fase.on{background:#000 !important;border:2px solid #0ff !important;color:#0ff !important}
+    body.hc .badge{background:#000 !important;color:#ff0 !important;border:1px solid #ff0 !important}
+    /* Acciones primarias y fase activa: amarillo sólido con texto negro (se ven "encendidas") */
+    body.hc .send,body.hc .fase.on{background:#ff0 !important;border:2px solid #ff0 !important;color:#000 !important;font-weight:800}
+    body.hc .fase.on b,body.hc .fase.on small{color:#000 !important}
 
     /* Lectura fácil */
     body.dys{letter-spacing:.06em;word-spacing:.16em;line-height:1.9}
@@ -458,12 +465,33 @@
     function quickAsk(q){input.value=q;preguntar(q);}
     input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();enviar();}});
 
-    /* Voz: síntesis (TTS) */
-    function speak(t){if(!('speechSynthesis'in window))return;window.speechSynthesis.cancel();
-      const u=new SpeechSynthesisUtterance(t.replace(/<[^>]*>/g,''));u.lang='es-CO';u.rate=.98;window.speechSynthesis.speak(u);}
-    function speakLast(){if(lastReply)speak(lastReply);}
+    /* Voz: síntesis (TTS) robusta */
+    let _voces=[];
+    function _cargarVoces(){if('speechSynthesis'in window)_voces=window.speechSynthesis.getVoices()||[];}
+    if('speechSynthesis'in window){_cargarVoces();window.speechSynthesis.onvoiceschanged=_cargarVoces;}
+    function _vozEs(){return _voces.find(v=>/es[-_]/i.test(v.lang))||_voces.find(v=>/^es/i.test(v.lang))||null;}
+    function speak(t){
+      if(!('speechSynthesis'in window)){alert('Tu navegador no soporta lectura por voz.');return;}
+      // Quita etiquetas y URLs (no tiene sentido leer enlaces largos en voz alta).
+      const texto=(t||'').replace(/<[^>]*>/g,'').replace(/https?:\/\/\S+/g,' ').trim();
+      if(!texto)return;
+      window.speechSynthesis.cancel();
+      if(!_voces.length)_cargarVoces();
+      const u=new SpeechSynthesisUtterance(texto);
+      const v=_vozEs(); if(v){u.voice=v;u.lang=v.lang;} else {u.lang='es-ES';}
+      u.rate=1;u.pitch=1;
+      window.speechSynthesis.speak(u);
+      // Hack de Chrome: la síntesis se corta en textos largos; pausar+reanudar la mantiene viva.
+      clearInterval(window._ttsKeep);
+      window._ttsKeep=setInterval(()=>{
+        if(!window.speechSynthesis.speaking){clearInterval(window._ttsKeep);return;}
+        window.speechSynthesis.pause();window.speechSynthesis.resume();
+      },9000);
+    }
+    function speakLast(){if(lastReply)speak(lastReply);else speak('Aún no hay una respuesta para leer.');}
     function toggleTTS(){ttsOn=!ttsOn;const b=document.getElementById('b-tts');b.setAttribute('aria-pressed',ttsOn);
-      if(ttsOn)speak('Lectura por voz activada.');else window.speechSynthesis.cancel();}
+      if(ttsOn)speak('Lectura por voz activada. Leeré en voz alta las próximas respuestas.');
+      else{clearInterval(window._ttsKeep);window.speechSynthesis.cancel();}}
 
     /* Voz: reconocimiento (dictado) */
     (function(){const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR)return;
@@ -486,15 +514,30 @@
     function clearChat(){box.innerHTML='';msgBot('Conversación reiniciada. ¿En qué te ayudo sobre Santander?');}
 
     /* Admin: análisis de conversaciones */
-    async function adminAnalisis(){const clave=prompt('Clave de administrador:');if(!clave)return;
+    async function adminAnalisis(){
+      const clave=prompt('🔐 Clave de administrador (demo para pruebas: admin1):','admin1');if(!clave)return;
       const load=cargando();
       try{const r=await fetch('/admin/analisis',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clave})});
         const d=await r.json();load.remove();
         if(!r.ok){msgBot('⚠️ '+(d.detail||'Error en el análisis.'));return;}
-        let t='📊 Análisis de '+d.total_preguntas+' pregunta(s):\n';
-        t+=(!d.categorias||!d.categorias.length)?'Aún no hay conversaciones para analizar.'
-          :d.categorias.map(c=>'• '+c.categoria+': '+c.cantidad).join('\n');
-        msgBot(t);}catch(e){load.remove();msgBot('⚠️ No se pudo conectar con el servidor.');}}
+        const {bub,wrap}=fila('bot');
+        const h=document.createElement('div');h.style.fontWeight='800';h.textContent='📊 Análisis de conversaciones';bub.appendChild(h);
+        const desc=document.createElement('div');desc.style.fontSize='.78rem';desc.style.color='var(--muted)';desc.style.margin='4px 0 8px';
+        desc.textContent='Un modelo de IA (LLM) clasifica por TEMA las preguntas reales de los visitantes, guardadas en memoria y leídas con pandas. Sirve para saber qué les interesa más del turismo en Santander.';
+        bub.appendChild(desc);
+        if(!d.categorias||!d.categorias.length){
+          const p=document.createElement('div');p.textContent='Aún no hay conversaciones para analizar.';bub.appendChild(p);
+        }else{
+          const tot=d.total_preguntas||d.categorias.reduce((a,c)=>a+c.cantidad,0);
+          const top=d.categorias[0];
+          const res=document.createElement('div');res.style.marginBottom='6px';
+          res.textContent='Sobre '+tot+' pregunta(s), el tema más consultado es «'+top.categoria+'».';bub.appendChild(res);
+          d.categorias.forEach(c=>{const pct=Math.round(100*c.cantidad/tot);
+            const row=document.createElement('div');row.style.margin='2px 0';
+            row.textContent='• '+c.categoria+': '+c.cantidad+' ('+pct+'%)';bub.appendChild(row);});
+        }
+        nombre(wrap,'Santy · Guía IA');box.scrollTop=box.scrollHeight;
+      }catch(e){load.remove();msgBot('⚠️ No se pudo conectar con el servidor.');}}
 
     /* Visión: identificar por foto */
     document.getElementById('img').addEventListener('change',async function(){

@@ -10,9 +10,11 @@ Flujo (barato y determinista):
 
     START → router → { guia | web | ambas } → supervisor → END
 
-**Diseño de costo mínimo** (la razón de usar grafo en vez de un ReAct libre):
-  - `router`: **1** llamada de clasificación con salida estructurada (Literal).
-  - `guia`: 1 llamada (RAG); `web`: **0** llamadas al LLM (Tavily es una API de búsqueda).
+**Diseño de bajo costo** (la razón de usar grafo en vez de un ReAct libre):
+  - `router`: **0** llamadas si hay señales claras de info actual (atajo por palabras clave);
+    si no, **1** llamada de clasificación con salida estructurada (Literal).
+  - `guia`: 1 llamada (RAG); `web`: 1 llamada (Tavily, 0 LLM, + 1 síntesis en ESPAÑOL,
+    porque Tavily suele responder en inglés).
   - `supervisor`: **0** llamadas (combina en código, como el `supervisor_node` del curso).
 
 Es una vía PARALELA: se expone en ``/grafo/combinado`` sin alterar los demás endpoints.
@@ -62,10 +64,54 @@ def _consultar_guia(pregunta: str) -> str:
     return rag.preguntar(pregunta).get("respuesta", "")
 
 
+_URL_RE = re.compile(r"https?://[^\s)]+")
+_ERRORES_WEB = ("La búsqueda web no", "No encontré", "No pude")
+
+
+def _resumir_es(pregunta: str, crudo: str) -> str:
+    """Reescribe en ESPAÑOL SOLO la prosa (Tavily suele responder en inglés). Las URLs se
+    manejan aparte (ver ``_consultar_web``). 1 llamada barata; si falla, devuelve el crudo.
+    """
+    system = (
+        "Eres un guía turístico de Santander, Colombia. Con base ÚNICAMENTE en la información "
+        "de búsqueda web proporcionada, responde en ESPAÑOL, claro y conciso, a la pregunta. "
+        "No inventes nada que no esté en esa información. NO incluyas URLs ni una sección de "
+        "fuentes (se agregan por separado); escribe solo el texto de la respuesta."
+    )
+    try:
+        from langchain_core.output_parsers import StrOutputParser
+        from langchain_core.prompts import ChatPromptTemplate
+
+        prompt = ChatPromptTemplate.from_messages([("system", "{s}"), ("human", "{h}")])
+        cadena = prompt | llm.construir_chat_model(temperature=0.2) | StrOutputParser()
+        human = f"Pregunta: {pregunta}\n\nInformación de búsqueda web:\n{crudo}"
+        return (cadena.invoke({"s": system, "h": human}) or crudo).strip()
+    except Exception:  # noqa: BLE001 - si la síntesis falla, al menos devolvemos el crudo
+        return crudo
+
+
 def _consultar_web(pregunta: str) -> str:
+    """Busca en la web y devuelve la respuesta en ESPAÑOL + las fuentes (URLs) limpias.
+
+    La prosa la reescribe el LLM (Tavily contesta en inglés); las URLs se extraen del crudo
+    y se re-anexan por código, para un formato de fuentes consistente (sin guiones dobles).
+    """
     from .tools import busca_web
 
-    return busca_web.invoke(pregunta)
+    crudo = busca_web.invoke(pregunta)
+    if not crudo or crudo.startswith(_ERRORES_WEB):
+        return crudo
+    urls = []
+    for u in _URL_RE.findall(crudo):
+        u = u.rstrip(".,)")
+        if u not in urls:
+            urls.append(u)
+    prosa = _resumir_es(pregunta, crudo)
+    # Quita cualquier bloque de fuentes que el modelo haya dejado y re-anexa uno limpio.
+    prosa = re.split(r"\n\s*Fuentes?\s*:", prosa, flags=re.IGNORECASE)[0].strip()
+    if urls:
+        prosa += "\n\nFuentes:\n" + "\n".join(f"- {u}" for u in urls[:3])
+    return prosa
 
 
 # ------------------------------- Nodos ---------------------------------- #

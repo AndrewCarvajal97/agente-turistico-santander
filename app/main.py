@@ -390,6 +390,36 @@ def grafo_diagrama() -> dict:
         raise HTTPException(status_code=500, detail=f"No se pudo generar el diagrama: {exc}")
 
 
+@app.post("/grafo/combinado")
+def grafo_combinado(entrada: PreguntaIn) -> dict:
+    """Grafo combinado (router → guía/web → supervisor): junta la guía (PDF) con la web
+    (Tavily) según la pregunta. Diseño de bajo costo (router 1 llamada, combinar en código).
+    """
+    try:
+        from . import grafo_combinado as gc
+
+        return gc.responder(entrada.pregunta)
+    except llm.SinCupoError:
+        raise HTTPException(status_code=503, detail=MSG_SIN_CUPO)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[grafo/combinado] error -> {exc}")
+        raise HTTPException(
+            status_code=503,
+            detail="El grafo combinado no está disponible ahora (límite de cuota o config).",
+        )
+
+
+@app.get("/grafo/combinado/diagrama")
+def grafo_combinado_diagrama() -> dict:
+    """Diagrama Mermaid del grafo combinado guía + web."""
+    try:
+        from . import grafo_combinado as gc
+
+        return {"mermaid": gc.diagrama_mermaid()}
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"No se pudo generar el diagrama: {exc}")
+
+
 @app.post("/reload")
 def reload() -> dict:
     try:

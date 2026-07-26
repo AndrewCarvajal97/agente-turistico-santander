@@ -6,8 +6,17 @@ que el agente lee para decidir cuándo usarla.
 
 Este módulo es **paralelo**: no toca los endpoints existentes (`/ask`, `/vision`).
 Está pensado para crecer (p. ej. una futura herramienta de base de datos).
+
+**Anti-bucle:** cada herramienta se memoiza *por ejecución del agente* (ver
+``ejecucion_aislada``): si el agente vuelve a llamar la misma herramienta con el
+mismo argumento, se devuelve el resultado ya calculado + una nota para que dé la
+respuesta final. Así se rompen los bucles de re-consulta y se ahorra cuota (no se
+reejecuta el RAG ni la búsqueda web, ni el LLM re-razona en vano).
 """
 from __future__ import annotations
+
+import contextvars
+from contextlib import contextmanager
 
 from langchain_core.tools import tool
 
@@ -26,13 +35,51 @@ def _asegurar_indexado() -> None:
         _agente.indexar()
 
 
+# --------------------------- Anti-bucle (caché por ejecución) --------------------------- #
+_cache_run: contextvars.ContextVar = contextvars.ContextVar("cache_herramientas", default=None)
+
+
+@contextmanager
+def ejecucion_aislada():
+    """Aísla una ejecución del agente: activa la caché de herramientas (anti-bucle).
+
+    Envuelve la llamada al agente en el orquestador. Fuera de este contexto, las
+    herramientas funcionan igual pero sin caché (p. ej. usadas desde el grafo).
+    """
+    token = _cache_run.set({})
+    try:
+        yield
+    finally:
+        _cache_run.reset(token)
+
+
+def _consulta_cacheada(nombre: str, arg: str, calcular):
+    """Devuelve el resultado; si ya se pidió (misma herramienta + argumento) en esta
+    ejecución, devuelve el cacheado + una nota para que el agente NO repita la herramienta."""
+    cache = _cache_run.get()
+    clave = (nombre, (arg or "").strip().lower())
+    if cache is not None and clave in cache:
+        return (
+            cache[clave]
+            + "\n\n(Nota: ya consultaste esto antes en esta conversación; usa esta "
+            "información para dar la respuesta final, no vuelvas a llamar la herramienta.)"
+        )
+    resultado = calcular()
+    if cache is not None:
+        cache[clave] = resultado
+    return resultado
+
+
+# ------------------------------- Herramientas ------------------------------- #
 @tool
 def guia_turistica(pregunta: str) -> str:
     """Responde preguntas sobre turismo en Santander, Colombia (destinos, gastronomía,
     deportes de aventura, transporte, mejor época) usando la guía oficial en PDF.
     Úsala para cualquier consulta sobre qué visitar, comer o hacer en Santander."""
     _asegurar_indexado()
-    return _agente.preguntar(pregunta)["respuesta"]
+    return _consulta_cacheada(
+        "guia_turistica", pregunta, lambda: _agente.preguntar(pregunta)["respuesta"]
+    )
 
 
 @tool
@@ -40,12 +87,16 @@ def buscar_historial(termino: str) -> str:
     """Busca en el historial de conversaciones guardadas las que mencionan un término.
     Úsala cuando pregunten qué han consultado antes los usuarios o para recordar
     conversaciones previas."""
-    resultados = _memoria.buscar(termino)
-    if not resultados:
-        return f"No hay conversaciones guardadas que mencionen '{termino}'."
-    return "\n".join(
-        f"- {r['pregunta']} -> {r['respuesta'][:80]}" for r in resultados[:5]
-    )
+
+    def _run() -> str:
+        resultados = _memoria.buscar(termino)
+        if not resultados:
+            return f"No hay conversaciones guardadas que mencionen '{termino}'."
+        return "\n".join(
+            f"- {r['pregunta']} -> {r['respuesta'][:80]}" for r in resultados[:5]
+        )
+
+    return _consulta_cacheada("buscar_historial", termino, _run)
 
 
 @tool
@@ -53,27 +104,31 @@ def explicar(tema: str) -> str:
     """Explica un tema de forma didáctica y sencilla, con ejemplos cotidianos y pensando
     en el público colombiano. Úsala cuando pidan EXPLICAR o ENSEÑAR un concepto (no para
     datos concretos de la guía turística)."""
-    plantilla = (
-        "Asume el papel de un profesor didáctico. Explica el tema de forma sencilla, para "
-        "estudiantes de secundaria, con ejemplos cotidianos y, si aplica, pensando en el "
-        "contexto colombiano. Responde en español.\n\nTema: {tema}"
-    )
-    # Esta herramienta usa Cohere específicamente (fuerte en contexto en español);
-    # si no hay clave de Cohere, cae al proveedor por defecto (cadena de respaldo).
-    if settings.cohere_api_key:
-        from langchain_core.output_parsers import StrOutputParser
-        from langchain_core.prompts import PromptTemplate
-        from langchain_cohere import ChatCohere
 
-        cadena = (
-            PromptTemplate(template=plantilla, input_variables=["tema"])
-            | ChatCohere(cohere_api_key=settings.cohere_api_key, model=settings.cohere_model)
-            | StrOutputParser()
+    def _run() -> str:
+        plantilla = (
+            "Asume el papel de un profesor didáctico. Explica el tema de forma sencilla, para "
+            "estudiantes de secundaria, con ejemplos cotidianos y, si aplica, pensando en el "
+            "contexto colombiano. Responde en español.\n\nTema: {tema}"
         )
-        return cadena.invoke({"tema": tema})
-    return llm.generar_texto(
-        plantilla.format(tema=tema), "Eres un profesor didáctico. Responde en español.", 1024
-    )
+        # Esta herramienta usa Cohere específicamente (fuerte en contexto en español);
+        # si no hay clave de Cohere, cae al proveedor por defecto (cadena de respaldo).
+        if settings.cohere_api_key:
+            from langchain_core.output_parsers import StrOutputParser
+            from langchain_core.prompts import PromptTemplate
+            from langchain_cohere import ChatCohere
+
+            cadena = (
+                PromptTemplate(template=plantilla, input_variables=["tema"])
+                | ChatCohere(cohere_api_key=settings.cohere_api_key, model=settings.cohere_model)
+                | StrOutputParser()
+            )
+            return cadena.invoke({"tema": tema})
+        return llm.generar_texto(
+            plantilla.format(tema=tema), "Eres un profesor didáctico. Responde en español.", 1024
+        )
+
+    return _consulta_cacheada("explicar", tema, _run)
 
 
 @tool
@@ -84,26 +139,30 @@ def busca_web(consulta: str) -> str:
     (destinos, gastronomía, rutas) usa la herramienta guia_turistica. Cita siempre la fuente."""
     if not settings.tavily_api_key:
         return "La búsqueda web no está disponible ahora (falta configurar TAVILY_API_KEY)."
-    try:
-        from langchain_tavily import TavilySearch
 
-        buscador = TavilySearch(
-            max_results=3, tavily_api_key=settings.tavily_api_key, topic="general"
-        )
-        # Enfoca la búsqueda en el contexto del proyecto para resultados más útiles.
-        datos = buscador.invoke({"query": f"{consulta} en Santander, Colombia"})
-        resultados = datos.get("results", []) if isinstance(datos, dict) else (datos or [])
-        if not resultados:
-            return "No encontré resultados web para esa consulta."
-        lineas = []
-        for r in resultados[:3]:
-            titulo = (r.get("title") or "").strip()
-            url = (r.get("url") or "").strip()
-            resumen = (r.get("content") or "").strip()[:220]
-            lineas.append(f"- {titulo}\n  {resumen}\n  Fuente: {url}")
-        return "\n".join(lineas)
-    except Exception as exc:  # noqa: BLE001 - la búsqueda web no debe tumbar al agente
-        return f"No pude completar la búsqueda web en este momento ({exc})."
+    def _run() -> str:
+        try:
+            from langchain_tavily import TavilySearch
+
+            buscador = TavilySearch(
+                max_results=3, tavily_api_key=settings.tavily_api_key, topic="general"
+            )
+            # Enfoca la búsqueda en el contexto del proyecto para resultados más útiles.
+            datos = buscador.invoke({"query": f"{consulta} en Santander, Colombia"})
+            resultados = datos.get("results", []) if isinstance(datos, dict) else (datos or [])
+            if not resultados:
+                return "No encontré resultados web para esa consulta."
+            lineas = []
+            for r in resultados[:3]:
+                titulo = (r.get("title") or "").strip()
+                url = (r.get("url") or "").strip()
+                resumen = (r.get("content") or "").strip()[:220]
+                lineas.append(f"- {titulo}\n  {resumen}\n  Fuente: {url}")
+            return "\n".join(lineas)
+        except Exception as exc:  # noqa: BLE001 - la búsqueda web no debe tumbar al agente
+            return f"No pude completar la búsqueda web en este momento ({exc})."
+
+    return _consulta_cacheada("busca_web", consulta, _run)
 
 
 # Lista de herramientas disponibles para el orquestador.

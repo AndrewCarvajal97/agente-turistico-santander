@@ -10,7 +10,7 @@ Este orquestador es **paralelo** a los endpoints existentes: se expone en
 """
 from __future__ import annotations
 
-from . import llm
+from . import llm, tools
 from .config import settings
 from .tools import HERRAMIENTAS
 
@@ -51,10 +51,14 @@ def responder(pregunta: str) -> dict:
 
     agente = _get_agente()
     try:
-        resultado = agente.invoke(
-            {"messages": [("user", pregunta)]},
-            config={"recursion_limit": settings.agente_max_pasos},
-        )
+        # `ejecucion_aislada` activa la caché de herramientas: si el agente repite una
+        # llamada idéntica (misma tool + argumento), no se reejecuta y se le avisa que ya
+        # tiene esa información → rompe bucles de re-consulta y ahorra cuota.
+        with tools.ejecucion_aislada():
+            resultado = agente.invoke(
+                {"messages": [("user", pregunta)]},
+                config={"recursion_limit": settings.agente_max_pasos},
+            )
     except GraphRecursionError:
         return {
             "respuesta": (

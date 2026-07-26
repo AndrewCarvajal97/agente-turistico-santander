@@ -15,15 +15,31 @@ despliega en **Oracle Cloud Infrastructure (OCI Compute)**.
 
 ## 📖 Descripción general
 
-El agente permite hacer preguntas en lenguaje natural (por ejemplo, *"¿dónde puedo practicar
-rafting?"*) y obtener respuestas fundamentadas exclusivamente en una guía turística en formato
-PDF, sin necesidad de abrir el documento.
+El agente responde preguntas en lenguaje natural (por ejemplo, *"¿dónde puedo practicar
+rafting?"*) fundamentadas en una guía turística en formato PDF. Sobre esa base, el proyecto
+ofrece **varios modos de interacción** ("fases" o *chats*), cada uno con una técnica distinta de
+LangChain, además de análisis de imágenes y de datos:
 
-**Estrategia: inyección de contexto completo.** Como el documento fuente es pequeño (una guía
-de 5 páginas), el agente entrega el **texto completo del PDF como contexto** al modelo en cada
-pregunta. Aprovechando la amplia ventana de contexto de los LLM actuales, esto resulta más
-simple, preciso y económico que un pipeline de embeddings para un documento de este tamaño, y
-evita que el modelo invente información fuera del documento.
+| Modo / chat | Endpoint | Qué hace |
+|---|---|---|
+| 🧠 **Contexto completo** | `POST /ask` | Inyecta el PDF completo como contexto (modo por defecto). |
+| 🔎 **RAG · base vectorial** | `POST /rag/ask` | Embeddings + FAISS/Pinecone + retriever con umbral; respuesta **con citaciones**. |
+| 🤖 **Agente ReAct** | `POST /agente` | Razona y **elige la herramienta** adecuada (LangGraph). |
+| 🕸️ **Grafo de estados** | `POST /grafo/ask` | Triaje → auto-resolver (RAG) / pedir info / abrir ticket. |
+| 🖼️ **Visión** | `POST /vision` | Identifica lugares/platos/actividades en una foto (Gemini multimodal). |
+| 📊 **Análisis de datos** | `POST /datos/analizar` | Explora, grafica y consulta el historial de conversaciones (admin). |
+
+El **frontend** incluye un **selector de fase** para alternar entre *Contexto completo* y *RAG*,
+más botones para visión y para el análisis de administración. Todos los modos comparten la
+**capa LLM multi-proveedor con respaldo** (Groq → Gemini → Cohere) y la **memoria por sesión**
+(CSV + pandas). Cada modo se detalla en su propia sección más abajo.
+
+**Modo por defecto — inyección de contexto completo.** Como la guía fuente es pequeña (5
+páginas), `/ask` entrega el **texto completo del PDF como contexto** en cada pregunta.
+Aprovechando la amplia ventana de contexto de los LLM actuales, esto resulta más simple, preciso
+y económico que un pipeline de embeddings para un documento de ese tamaño, y evita que el modelo
+invente información fuera del documento. Para escalar a documentos más grandes o múltiples
+fuentes está la fase **RAG con base vectorial** (ver más abajo).
 
 ---
 
@@ -58,7 +74,8 @@ evita que el modelo invente información fuera del documento.
            /datos/analizar → agente de análisis de datos (router + pandas/gráficos)
 ```
 
-**Flujo:**
+**Flujo del chat principal (`/ask`) y servicios compartidos** (los modos paralelos —RAG,
+agente ReAct, grafo y análisis de datos— se detallan en sus secciones más abajo):
 1. **Al iniciar:** se lee el PDF y su texto queda cargado en memoria como contexto.
 2. **Por cada pregunta:** se arma el prompt (documento + memoria + pregunta) y se envía a la
    capa LLM (LangChain), que elige el proveedor y aplica el respaldo si uno se queda sin cupo.

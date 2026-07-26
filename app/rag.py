@@ -14,9 +14,10 @@ a documentos grandes o a múltiples fuentes, donde inyectar todo el texto no es 
 """
 from __future__ import annotations
 
+import os
+
 from . import llm
 from .config import settings
-from .pdf_loader import leer_pdf
 
 SYSTEM_PROMPT_RAG = (
     "Eres un asistente turístico experto en Santander, Colombia. Responde en español, de "
@@ -50,19 +51,20 @@ class RagSantander:
 
     def indexar(self, pdf_path: str | None = None) -> int:
         """Carga el PDF, lo divide en chunks, construye FAISS, el retriever y la cadena."""
+        from langchain_community.document_loaders import PyPDFLoader
         from langchain_community.vectorstores import FAISS
-        from langchain_core.documents import Document
         from langchain_core.output_parsers import StrOutputParser
         from langchain_core.prompts import ChatPromptTemplate
         from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-        texto = leer_pdf(pdf_path or settings.pdf_path)
+        # PyPDFLoader carga una página por Document con metadata (source, page),
+        # que se conserva al dividir con split_documents -> citaciones trazables.
+        paginas = PyPDFLoader(pdf_path or settings.pdf_path).load()
         splitter = RecursiveCharacterTextSplitter(
             chunk_size=settings.rag_chunk_size, chunk_overlap=settings.rag_chunk_overlap
         )
-        fragmentos = splitter.split_text(texto)
-        documentos = [Document(page_content=f) for f in fragmentos]
-        vectorstore = FAISS.from_documents(documentos, self._embeddings())
+        fragmentos = splitter.split_documents(paginas)
+        vectorstore = FAISS.from_documents(fragmentos, self._embeddings())
         # Retriever con umbral de similitud: descarta fragmentos poco relevantes.
         self.retriever = vectorstore.as_retriever(
             search_type="similarity_score_threshold",
@@ -117,9 +119,18 @@ class RagSantander:
         if respuesta.strip().rstrip(".!?¡¿").lower() in ("no lo sé", "no lo se"):
             return self._no_encontrado()
 
+        # Citaciones trazables: fragmento + página de origen (metadata del loader).
+        citaciones = [
+            {
+                "contenido": d.page_content[:180].strip() + "…",
+                "pagina": (d.metadata.get("page", 0) or 0) + 1,
+                "fuente": os.path.basename(d.metadata.get("source", "")),
+            }
+            for d in documentos
+        ]
         return {
             "respuesta": respuesta,
-            "citaciones": [d.page_content[:180].strip() + "…" for d in documentos],
+            "citaciones": citaciones,
             "documentos_encontrados": True,
         }
 

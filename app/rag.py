@@ -46,6 +46,7 @@ class RagSantander:
     def __init__(self) -> None:
         self.retriever = None
         self.document_chain = None
+        self._vectorstore = None  # referencia para el fallback de recuperación
 
     def _embeddings(self):
         """Modelo de embeddings: Cohere por defecto (gratis en el trial) o Gemini."""
@@ -187,6 +188,7 @@ class RagSantander:
                 f"RAG_VECTORSTORE inválido: '{backend}'. Usa 'faiss' o 'pinecone'."
             )
         vectorstore, n_fragmentos = backends[backend](embeddings, docs_dir, forzar)
+        self._vectorstore = vectorstore  # para el fallback de recuperación
 
         # Retriever: por defecto `similarity` top-k (mejor recall). Si se configura un
         # umbral (>0) se usa `similarity_score_threshold` para descartar los flojos. Ojo:
@@ -248,14 +250,21 @@ class RagSantander:
         return [pregunta] + variantes[: settings.rag_multiquery_n]
 
     def _recuperar(self, pregunta: str):
-        """Recupera documentos; con multi-query, une (dedup) los de todas las variantes."""
+        """Recupera documentos; con multi-query une (dedup) los de todas las variantes.
+
+        Robustez: si el retriever (p. ej. con umbral) no devuelve nada para una consulta,
+        cae a una búsqueda ``similarity`` top-k directa sobre el vectorstore. Así un umbral
+        mal configurado (o alto en FAISS) nunca deja al RAG sin contexto: el "No lo sé"
+        pasa a decidirlo el LLM con el prompt estricto, no la falta de recuperación.
+        """
         consultas = [pregunta]
         if settings.rag_multiquery:
             consultas = self._generar_consultas(pregunta)
 
         vistos, documentos = set(), []
-        for consulta in consultas:
-            for d in self.retriever.invoke(consulta):
+
+        def _agregar(docs):
+            for d in docs:
                 clave = (
                     d.metadata.get("source"),
                     d.metadata.get("page"),
@@ -264,6 +273,16 @@ class RagSantander:
                 if clave not in vistos:
                     vistos.add(clave)
                     documentos.append(d)
+
+        for consulta in consultas:
+            docs = self.retriever.invoke(consulta)
+            if not docs and self._vectorstore is not None:
+                docs = self._vectorstore.similarity_search(consulta, k=settings.rag_top_k)
+            _agregar(docs)
+
+        # Última red de seguridad: si aún no hay nada, similarity puro sobre la pregunta.
+        if not documentos and self._vectorstore is not None:
+            _agregar(self._vectorstore.similarity_search(pregunta, k=settings.rag_top_k))
         return documentos
 
     def preguntar(self, pregunta: str) -> dict:

@@ -192,6 +192,26 @@ def admin_analisis(entrada: AdminIn) -> dict:
         raise HTTPException(status_code=500, detail=f"Error al analizar: {exc}")
 
 
+@app.post("/agente")
+def agente_endpoint(entrada: PreguntaIn) -> dict:
+    """Agente orquestador ReAct (LangGraph): decide qué herramienta usar.
+
+    Implementación PARALELA a /ask y /vision. Consume más tokens (razona + actúa),
+    así que está pensada para demostración y para crecer con más herramientas.
+    """
+    try:
+        from . import orchestrator  # import perezoso (solo si se usa el agente)
+
+        return orchestrator.responder(entrada.pregunta)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[agente] error -> {exc}")
+        raise HTTPException(
+            status_code=503,
+            detail="El agente orquestador no está disponible ahora (posible límite de "
+            "cuota del LLM). Intenta más tarde.",
+        )
+
+
 @app.post("/reload")
 def reload() -> dict:
     try:

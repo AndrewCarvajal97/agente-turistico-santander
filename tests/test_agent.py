@@ -192,3 +192,11 @@ def test_encode_image(tmp_path):
     b64 = vision.encode_image(ruta)
     # Lo codificado debe decodificar de vuelta al contenido original.
     assert base64.b64decode(b64) == contenido
+
+
+# ---------------------- Orquestador (agente con herramientas) --------------- #
+def test_orquestador_registra_herramientas():
+    from app.tools import HERRAMIENTAS
+
+    nombres = {t.name for t in HERRAMIENTAS}
+    assert {"guia_turistica", "buscar_historial"} <= nombres

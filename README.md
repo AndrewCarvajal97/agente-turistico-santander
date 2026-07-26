@@ -82,6 +82,8 @@ alura-latam/
 │   ├── analytics.py     # Análisis de conversaciones (pandas + LLM + JSON)
 │   ├── vision.py        # Análisis de imágenes con Gemini visión (multimodal)
 │   ├── llm.py           # Capa LLM con LangChain (Gemini/Groq/Cohere + fallback)
+│   ├── tools.py         # Herramientas del agente orquestador (LangChain Tools)
+│   ├── orchestrator.py  # Agente ReAct con LangGraph (endpoint /agente, paralelo)
 │   └── config.py        # Configuración desde variables de entorno
 ├── static/index.html    # Interfaz web de chat
 ├── tests/test_agent.py  # Tests unitarios (sin llamar a la API)
@@ -235,10 +237,23 @@ transporte, mejor época para visitar y preguntas frecuentes de Santander, Colom
 
 ---
 
+## 🤖 Agente orquestador (ReAct) — implementación paralela
+
+Además del ruteo explícito (`/ask`, `/vision`), el proyecto incluye un **agente ReAct**
+opcional en `POST /agente`, construido con **LangGraph** (`create_react_agent`). En lugar de
+un ruteo fijo, el agente **razona y decide** qué herramienta usar según la consulta. Las
+herramientas ([tools.py](app/tools.py)) son `guia_turistica` (Q&A sobre el PDF) y
+`buscar_historial` (búsqueda en la memoria), y la lista es fácil de extender (p. ej. una
+futura herramienta de base de datos).
+
+> Es una vía **paralela** que no altera los endpoints principales. Consume más tokens (razona
+> + actúa en varios pasos), por lo que está pensada para demostración y crecimiento futuro.
+
 ## 🗺️ Roadmap / próximos pasos
 
 - Migrar a un pipeline **RAG con LangChain** (embeddings + base vectorial) para escalar a
   documentos más grandes o a múltiples fuentes.
+- Sumar herramientas al orquestador (p. ej. consulta a una base de datos).
 
 ---
 

@@ -200,3 +200,23 @@ def test_orquestador_registra_herramientas():
 
     nombres = {t.name for t in HERRAMIENTAS}
     assert {"guia_turistica", "buscar_historial", "explicar"} <= nombres
+
+
+# ------------------------------ RAG (embeddings + FAISS) -------------------- #
+def test_rag_chunking_del_documento():
+    # No requiere red: solo verifica que el documento se divide en chunks.
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+    from app.pdf_loader import leer_pdf
+
+    texto = leer_pdf(PDF)
+    splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=100)
+    fragmentos = splitter.split_text(texto)
+    assert len(fragmentos) > 1
+    assert all(len(f) <= 1000 for f in fragmentos)  # margen por el corte
+
+
+def test_rag_sin_indexar():
+    from app.rag import RagSantander
+
+    assert RagSantander().esta_listo() is False

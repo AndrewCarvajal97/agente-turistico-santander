@@ -3,7 +3,8 @@
 Endpoints:
   GET  /               -> interfaz web mínima (chat)
   GET  /health         -> estado del servicio
-  POST /ask            -> responde una pregunta (con memoria por sesión)
+  POST /ask            -> responde una pregunta (contexto completo + memoria)
+  POST /rag/ask        -> responde con RAG (embeddings + FAISS, vía paralela)
   POST /vision         -> analiza una imagen (Gemini visión)
   GET  /history        -> lista/busca las conversaciones guardadas
   POST /admin/analisis -> categoriza las preguntas (admin, requiere clave)
@@ -195,6 +196,27 @@ def admin_analisis(entrada: AdminIn) -> dict:
         raise HTTPException(status_code=503, detail=MSG_SIN_CUPO)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"Error al analizar: {exc}")
+
+
+@app.post("/rag/ask")
+def rag_ask(entrada: PreguntaIn) -> dict:
+    """RAG real: recupera los chunks más relevantes (embeddings + FAISS) y responde.
+
+    Vía PARALELA a /ask (que usa contexto completo). Útil para documentos grandes.
+    Usa embeddings de Cohere, así que requiere COHERE_API_KEY.
+    """
+    try:
+        from .rag import rag  # import perezoso (solo si se usa el RAG)
+
+        return rag.preguntar(entrada.pregunta)
+    except llm.SinCupoError:
+        raise HTTPException(status_code=503, detail=MSG_SIN_CUPO)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[rag] error -> {exc}")
+        raise HTTPException(
+            status_code=503,
+            detail="El RAG no está disponible ahora (falta COHERE_API_KEY o límite de cuota).",
+        )
 
 
 @app.post("/agente")

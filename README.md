@@ -85,6 +85,7 @@ alura-latam/
 │   ├── memory.py        # Memoria de conversaciones en CSV (pandas + filtros)
 │   ├── analytics.py     # Análisis de conversaciones (pandas + LLM + JSON)
 │   ├── vision.py        # Análisis de imágenes con Gemini visión (multimodal)
+│   ├── rag.py           # RAG real (chunks + embeddings Cohere + FAISS) — /rag/ask
 │   ├── llm.py           # Capa LLM con LangChain (Gemini/Groq/Cohere + fallback)
 │   ├── tools.py         # Herramientas del agente orquestador (LangChain Tools)
 │   ├── orchestrator.py  # Agente ReAct con LangGraph (endpoint /agente, paralelo)
@@ -113,6 +114,7 @@ alura-latam/
 | Orquestación LLM | **LangChain** (chat models + prompts + LCEL + fallback) |
 | IA / LLM         | **Gemini**, **Groq** (Llama/Gemma) o **Cohere** — conmutable, con respaldo |
 | Lectura de PDF   | pypdf                                         |
+| RAG / vectores   | FAISS + embeddings de Cohere (`RecursiveCharacterTextSplitter`) |
 | Memoria / datos  | pandas (CSV de sesiones, filtros)             |
 | Nube / Deploy    | Oracle Cloud Infrastructure (OCI Compute)     |
 | Frontend         | HTML + CSS + JavaScript (vanilla)             |
@@ -257,11 +259,20 @@ datos), y cada herramienta puede usar el LLM que mejor le sirva.
 > Es una vía **paralela** que no altera los endpoints principales. Consume más tokens (razona
 > + actúa en varios pasos), por lo que está pensada para demostración y crecimiento futuro.
 
+## 🔎 RAG real (embeddings + FAISS) — vía paralela
+
+Además del enfoque de **contexto completo** de `/ask`, el proyecto incluye un **RAG clásico**
+en `POST /rag/ask` ([rag.py](app/rag.py)): el documento se divide en *chunks*
+(`RecursiveCharacterTextSplitter`), cada chunk se convierte en un **vector semántico** con
+**embeddings de Cohere**, y se indexa en **FAISS**. Por cada pregunta se recuperan los chunks
+más similares (*retrieval*) y solo esos se pasan al LLM para **generar** la respuesta. La
+respuesta incluye los `fragmentos` recuperados. Es la técnica adecuada para escalar a
+documentos grandes o a múltiples fuentes (requiere `COHERE_API_KEY`).
+
 ## 🗺️ Roadmap / próximos pasos
 
-- Migrar a un pipeline **RAG con LangChain** (embeddings + base vectorial) para escalar a
-  documentos más grandes o a múltiples fuentes.
 - Sumar herramientas al orquestador (p. ej. consulta a una base de datos).
+- Persistir el índice FAISS en disco para no reindexar en cada arranque.
 
 ---
 

@@ -41,6 +41,13 @@ class Settings:
     # --- Cohere (fuerte en contexto en español/latinoamericano) ---
     cohere_api_key: str = _get("COHERE_API_KEY")
     cohere_model: str = _get("COHERE_MODEL", "command-r-08-2024")
+    # Modelo de embeddings de Cohere (para el RAG real).
+    cohere_embed_model: str = _get("COHERE_EMBED_MODEL", "embed-multilingual-v3.0")
+
+    # --- RAG (recuperación por embeddings + FAISS), vía paralela a /ask ---
+    rag_chunk_size: int = int(_get("RAG_CHUNK_SIZE", "800") or 800)
+    rag_chunk_overlap: int = int(_get("RAG_CHUNK_OVERLAP", "100") or 100)
+    rag_top_k: int = int(_get("RAG_TOP_K", "4") or 4)
 
     # Documento fuente
     pdf_path: str = _get("PDF_PATH", "data/guia_turistica_santander.pdf")

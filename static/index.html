@@ -32,6 +32,27 @@
     .chips { margin:12px 0 0; display:flex; flex-wrap:wrap; gap:8px; }
     .chip { background:#fff; border:1px solid #cfd8e0; border-radius:20px;
             padding:6px 12px; font-size:.82rem; cursor:pointer; }
+
+    /* Selector de fase (contexto completo vs RAG con base vectorial) */
+    .modos { display:flex; gap:10px; justify-content:center; margin-bottom:14px; }
+    .modo-btn { background:#fff; border:1px solid #cfd8e0; border-radius:12px;
+                padding:8px 16px; font-size:.86rem; cursor:pointer; line-height:1.2;
+                display:flex; flex-direction:column; align-items:center; gap:2px;
+                transition: all .15s; }
+    .modo-btn small { font-size:.68rem; opacity:.75; }
+    .modo-btn.activo { background: var(--teal); color:#fff; border-color: var(--teal); }
+    .modo-btn.activo small { opacity:.9; }
+
+    /* Etiqueta de fase que respondió + citaciones trazables */
+    .badge { display:inline-block; font-size:.66rem; font-weight:700; letter-spacing:.02em;
+             padding:2px 9px; border-radius:10px; margin-bottom:7px; }
+    .badge.ctx { background:#dbeafe; color:#1e40af; }
+    .badge.rag { background:#d1fae5; color:#065f46; }
+    .citas { margin-top:9px; }
+    .citas summary { cursor:pointer; color: var(--teal); font-weight:600; font-size:.76rem; }
+    .cita { border-left:3px solid var(--teal); padding:5px 9px; margin:7px 0;
+            background:#f2f7f7; border-radius:0 6px 6px 0; font-size:.78rem; color:#33424f; }
+    .cita .meta { font-size:.68rem; color:#66788a; margin-top:3px; }
   </style>
 </head>
 <body>
@@ -40,6 +61,16 @@
     <p>Pregúntame sobre destinos, aventura y gastronomía de Santander, Colombia</p>
   </header>
   <main>
+    <!-- Fase de respuesta: contexto completo (/ask) o RAG con base vectorial (/rag/ask) -->
+    <div class="modos" id="modos">
+      <button type="button" class="modo-btn activo" data-modo="ask">
+        🧠 Contexto completo <small>respuesta directa</small>
+      </button>
+      <button type="button" class="modo-btn" data-modo="rag">
+        🔎 RAG · base vectorial <small>con citas de fuente</small>
+      </button>
+    </div>
+
     <div id="chat">
       <div class="msg bot"><div class="bubble">¡Hola! 👋 Soy tu guía de Santander.
       Pregúntame lo que quieras sobre sus sitios turísticos.</div></div>
@@ -77,6 +108,16 @@
     const input = document.getElementById('pregunta');
     const boton = document.getElementById('enviar');
 
+    // Fase activa: "ask" (contexto completo) o "rag" (base vectorial con citas).
+    let modo = 'ask';
+    document.getElementById('modos').addEventListener('click', (e) => {
+      const btn = e.target.closest('.modo-btn');
+      if (!btn) return;
+      modo = btn.dataset.modo;
+      document.querySelectorAll('.modo-btn').forEach(b => b.classList.toggle('activo', b === btn));
+      input.focus();
+    });
+
     // Identificador de sesión persistente (recuerda al usuario sin registro).
     function getSessionId() {
       let id = localStorage.getItem('agente_session');
@@ -90,17 +131,69 @@
     }
     const SESSION_ID = getSessionId();
 
-    function burbuja(texto, clase, fuente) {
+    // Burbuja simple (usuario, errores, o respuesta de contexto completo con su fuente).
+    function burbuja(texto, clase, fuente, fase) {
       const wrap = document.createElement('div');
       wrap.className = 'msg ' + clase;
       const b = document.createElement('div');
       b.className = 'bubble';
-      b.textContent = texto;
+      if (fase === 'ctx') {
+        const badge = document.createElement('span');
+        badge.className = 'badge ctx';
+        badge.textContent = '🧠 Contexto completo';
+        b.appendChild(badge);
+        b.appendChild(document.createElement('br'));
+      }
+      const span = document.createElement('span');
+      span.textContent = texto;
+      b.appendChild(span);
       if (fuente) {
         const f = document.createElement('div');
         f.className = 'fuentes';
         f.textContent = '📄 Fuente: ' + fuente;
         b.appendChild(f);
+      }
+      wrap.appendChild(b);
+      chat.appendChild(wrap);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    // Burbuja de la fase RAG: respuesta completa + citaciones trazables (página + fuente).
+    function burbujaRag(data) {
+      const wrap = document.createElement('div');
+      wrap.className = 'msg bot';
+      const b = document.createElement('div');
+      b.className = 'bubble';
+
+      const badge = document.createElement('span');
+      badge.className = 'badge rag';
+      badge.textContent = '🔎 RAG · base vectorial';
+      b.appendChild(badge);
+      b.appendChild(document.createElement('br'));
+
+      const span = document.createElement('span');
+      span.textContent = data.respuesta;
+      b.appendChild(span);
+
+      if (data.citaciones && data.citaciones.length) {
+        const citas = document.createElement('div');
+        citas.className = 'citas';
+        const det = document.createElement('details');
+        const sum = document.createElement('summary');
+        sum.textContent = '📚 ' + data.citaciones.length + ' fuente(s) citada(s)';
+        det.appendChild(sum);
+        data.citaciones.forEach(c => {
+          const div = document.createElement('div');
+          div.className = 'cita';
+          div.textContent = c.contenido;
+          const meta = document.createElement('div');
+          meta.className = 'meta';
+          meta.textContent = '📄 ' + c.fuente + ' · pág. ' + c.pagina;
+          div.appendChild(meta);
+          det.appendChild(div);
+        });
+        citas.appendChild(det);
+        b.appendChild(citas);
       }
       wrap.appendChild(b);
       chat.appendChild(wrap);
@@ -113,18 +206,25 @@
       boton.disabled = true;
       const cargando = document.createElement('div');
       cargando.className = 'msg bot';
-      cargando.innerHTML = '<div class="bubble">Escribiendo…</div>';
+      cargando.innerHTML = '<div class="bubble">' +
+        (modo === 'rag' ? '🔎 Buscando en la base vectorial…' : 'Escribiendo…') + '</div>';
       chat.appendChild(cargando);
+      chat.scrollTop = chat.scrollHeight;
       try {
-        const r = await fetch('/ask', {
+        const endpoint = modo === 'rag' ? '/rag/ask' : '/ask';
+        const r = await fetch(endpoint, {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({ pregunta: texto, session_id: SESSION_ID })
         });
         const data = await r.json();
         cargando.remove();
-        if (r.ok) burbuja(data.respuesta, 'bot', data.fuente);
-        else burbuja('⚠️ ' + (data.detail || 'Error en el servidor.'), 'bot');
+        if (r.ok) {
+          if (modo === 'rag') burbujaRag(data);
+          else burbuja(data.respuesta, 'bot', data.fuente, 'ctx');
+        } else {
+          burbuja('⚠️ ' + (data.detail || 'Error en el servidor.'), 'bot');
+        }
       } catch (e) {
         cargando.remove();
         burbuja('⚠️ No se pudo conectar con el servidor.', 'bot');

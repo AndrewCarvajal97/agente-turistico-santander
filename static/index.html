@@ -178,21 +178,29 @@
 
     footer{position:relative;z-index:10;text-align:center;color:var(--muted);font-size:.72rem;padding:10px 16px 18px}
 
-    /* Alto contraste — blanco y negro limpio (contraste 21:1, sin amarillo cansón).
-       Controles con borde blanco fino; activos/primarios invertidos (blanco sólido). */
+    /* Alto contraste (mejor práctica WCAG para tema oscuro): texto BLANCO puro sobre negro,
+       sin glass/blur/sombras. El borde va SOLO en los controles interactivos (contraste
+       no-textual >=3:1), NO en las tarjetas (evita el efecto "encajonado"). Foco muy visible. */
     body.hc{background:#000 !important;color:#fff !important}
-    body.hc .glass,body.hc .card,body.hc .box,body.hc .chatwrap,body.hc .destino,
-    body.hc #input,body.hc .fase,body.hc .qchip,body.hc .tbtn,body.hc .iconbtn,body.hc .subact,body.hc .mic{
-      background:#000 !important;border:1px solid #fff !important;color:#fff !important;box-shadow:none !important;backdrop-filter:none !important}
-    body.hc .bub{background:#0a0a0a !important;border:1px solid #fff !important;color:#fff !important}
-    body.hc .muted,body.hc .desc,body.hc small,body.hc p,body.hc .name,body.hc .about,body.hc b{color:#fff !important}
-    body.hc a,body.hc .wline a{color:#7cc7ff !important}   /* enlaces: cian claro, legible */
-    body.hc .orb,body.hc .mtns{display:none}
+    /* Contenedores: fondo sólido, SIN borde (la jerarquía la da el texto, no las cajas). */
+    body.hc .glass,body.hc .card,body.hc .box,body.hc .chatwrap{
+      background:#000 !important;border-color:transparent !important;box-shadow:none !important;backdrop-filter:none !important}
+    /* Todo el texto a blanco puro (elimina grises de bajo contraste). */
+    body.hc .muted,body.hc .desc,body.hc small,body.hc p,body.hc .name,body.hc .about,body.hc b,body.hc h2,body.hc .lbl{color:#fff !important}
+    /* Controles interactivos: borde blanco visible (2px) para distinguirlos del fondo. */
+    body.hc #input,body.hc .fase,body.hc .qchip,body.hc .tbtn,body.hc .iconbtn,body.hc .subact,body.hc .mic,body.hc .destino{
+      background:#000 !important;border:2px solid #fff !important;color:#fff !important;box-shadow:none !important;backdrop-filter:none !important}
+    body.hc .bub{background:#000 !important;border:1px solid #fff !important;color:#fff !important}
     body.hc .badge{background:#000 !important;color:#fff !important;border:1px solid #fff !important}
-    /* Activos/primarios: invertido (blanco sólido, texto negro) → "encendidos" sin amarillo */
-    body.hc .send,body.hc .fase.on,body.hc .tbtn[aria-pressed="true"]{
-      background:#fff !important;border:1px solid #fff !important;color:#000 !important;font-weight:800}
+    /* Enlaces: cian claro + subrayado (distinguibles sin depender solo del color). */
+    body.hc a,body.hc .wline a{color:#7cc7ff !important;text-decoration:underline !important}
+    body.hc .orb,body.hc .mtns{display:none}
+    /* Estado activo / acciones primarias: relleno blanco con texto negro (resaltan claramente). */
+    body.hc .send,body.hc .fase.on,body.hc .tbtn[aria-pressed="true"],body.hc .dlpdf{
+      background:#fff !important;border:2px solid #fff !important;color:#000 !important;font-weight:800}
     body.hc .fase.on b,body.hc .fase.on small{color:#000 !important}
+    /* Foco muy visible en cualquier elemento. */
+    body.hc *:focus-visible{outline:3px solid #fff !important;outline-offset:2px}
 
     /* Lectura fácil */
     body.dys{letter-spacing:.06em;word-spacing:.16em;line-height:1.9}

@@ -42,6 +42,15 @@ def _terminos(texto: str) -> set:
     """Términos significativos (>=5 letras, sin palabras comunes) para medir solape."""
     return {t for t in re.findall(r"[a-záéíóúñü]{5,}", (texto or "").lower())} - _PALABRAS_COMUNES
 
+
+# Caracteres de control (p. ej. el glifo de viñeta que pypdf extrae como \x7f): se quitan
+# para que no ensucien el contexto del LLM ni las citaciones mostradas al usuario.
+_CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
+def _limpiar(texto: str) -> str:
+    return _CTRL.sub("", texto or "").strip()
+
 SYSTEM_PROMPT_RAG = (
     "Eres un guía turístico experto y amable de Santander, Colombia. Responde en español, "
     "de forma clara y concisa. Para los DATOS CONCRETOS de Santander (lugares, actividades, "
@@ -348,7 +357,7 @@ class RagSantander:
         ]
         return [
             {
-                "contenido": d.page_content[:180].strip() + "…",
+                "contenido": _limpiar(d.page_content)[:180] + "…",
                 "pagina": (d.metadata.get("page", 0) or 0) + 1,
                 "fuente": os.path.basename(d.metadata.get("source", "")),
             }
@@ -398,7 +407,7 @@ class RagSantander:
         ]
         citaciones = [
             {
-                "contenido": d.page_content[:180].strip() + "…",
+                "contenido": _limpiar(d.page_content)[:180] + "…",
                 "pagina": (d.metadata.get("page", 0) or 0) + 1,
                 "fuente": os.path.basename(d.metadata.get("source", "")),
             }

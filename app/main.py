@@ -17,11 +17,12 @@ Endpoints:
 from __future__ import annotations
 
 import base64
+import json
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -147,6 +148,49 @@ def ask(entrada: PreguntaIn, request: Request) -> RespuestaOut:
     )
 
 
+def _sse(data: dict) -> str:
+    """Formatea un evento Server-Sent Events (SSE)."""
+    return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+@app.post("/ask/stream")
+def ask_stream(entrada: PreguntaIn, request: Request) -> StreamingResponse:
+    """Igual que /ask pero en **streaming** (SSE): emite la respuesta token a token.
+
+    Eventos: {tipo:'token', texto} por fragmento y {tipo:'fin', fuente} al final.
+    """
+    session_id = entrada.session_id.strip()
+    ip = request.client.host if request.client else ""
+    contexto_conv = memory.construir_contexto(session_id) if session_id else ""
+
+    def generar():
+        if not agent.esta_listo():
+            yield _sse({"tipo": "token", "texto": MSG_ERROR})
+            yield _sse({"tipo": "fin", "fuente": ""})
+            return
+        partes, ok = [], True
+        try:
+            for fragmento in agent.preguntar_stream(entrada.pregunta, contexto_conv):
+                partes.append(fragmento)
+                yield _sse({"tipo": "token", "texto": fragmento})
+        except llm.SinCupoError:
+            partes, ok = [MSG_SIN_CUPO], False
+            yield _sse({"tipo": "token", "texto": MSG_SIN_CUPO})
+        except Exception as exc:  # noqa: BLE001
+            print(f"[ask/stream] error -> {exc}")
+            partes, ok = [MSG_ERROR], False
+            yield _sse({"tipo": "token", "texto": MSG_ERROR})
+        respuesta = "".join(partes)
+        if session_id and ok and respuesta:
+            try:
+                memory.guardar_turno(session_id, entrada.pregunta, respuesta, ip=ip)
+            except Exception as exc:  # noqa: BLE001
+                print(f"[memory] No se pudo guardar -> {exc}")
+        yield _sse({"tipo": "fin", "fuente": agent.fuente})
+
+    return StreamingResponse(generar(), media_type="text/event-stream")
+
+
 @app.post("/vision")
 async def vision_endpoint(file: UploadFile = File(...), pregunta: str = Form("")) -> dict:
     """Analiza una imagen con Gemini visión (identifica lugares/platos de Santander)."""
@@ -243,6 +287,53 @@ def rag_ask(entrada: PreguntaIn, request: Request) -> dict:
             status_code=503,
             detail="El RAG no está disponible ahora (falta COHERE_API_KEY o límite de cuota).",
         )
+
+
+@app.post("/rag/ask/stream")
+def rag_ask_stream(entrada: PreguntaIn, request: Request) -> StreamingResponse:
+    """Igual que /rag/ask pero en **streaming** (SSE): respuesta token a token y, al final,
+    las citaciones. Eventos: {tipo:'token', texto} y {tipo:'fin', citaciones}.
+    """
+    session_id = entrada.session_id.strip()
+    ip = request.client.host if request.client else ""
+    clave_mem = f"{session_id}:rag" if session_id else ""
+    contexto_conv = memory.construir_contexto(clave_mem) if clave_mem else ""
+
+    def generar():
+        from .rag import rag
+
+        try:
+            inputs, documentos = rag.recuperar_para_stream(entrada.pregunta, contexto_conv)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[rag/stream] error -> {exc}")
+            yield _sse({"tipo": "token", "texto": "El RAG no está disponible ahora (falta COHERE_API_KEY o límite de cuota)."})
+            yield _sse({"tipo": "fin", "citaciones": []})
+            return
+        if inputs is None:
+            yield _sse({"tipo": "token", "texto": "No lo sé."})
+            yield _sse({"tipo": "fin", "citaciones": []})
+            return
+        partes = []
+        try:
+            for fragmento in rag.document_chain.stream(inputs):
+                if fragmento:
+                    partes.append(fragmento)
+                    yield _sse({"tipo": "token", "texto": fragmento})
+        except Exception as exc:  # noqa: BLE001
+            print(f"[rag/stream] error -> {exc}")
+            yield _sse({"tipo": "token", "texto": MSG_SIN_CUPO})
+            yield _sse({"tipo": "fin", "citaciones": []})
+            return
+        respuesta = "".join(partes)
+        citaciones = rag.citaciones_para(respuesta, documentos)
+        if clave_mem and respuesta:
+            try:
+                memory.guardar_turno(clave_mem, entrada.pregunta, respuesta, ip=ip)
+            except Exception as exc:  # noqa: BLE001
+                print(f"[memory] rag stream no guardó -> {exc}")
+        yield _sse({"tipo": "fin", "citaciones": citaciones})
+
+    return StreamingResponse(generar(), media_type="text/event-stream")
 
 
 @app.post("/rag/reindex")

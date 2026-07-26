@@ -345,20 +345,53 @@
       nombre(wrap,'Santy · Guía IA');box.scrollTop=box.scrollHeight;}
     function cargando(){const{bub,wrap}=fila('bot');bub.innerHTML='<span class="dots"><i></i><i></i><i></i></span>';return wrap.parentNode;}
 
-    /* Envío al agente real */
+    /* Burbuja del bot para streaming: badge + span de texto vacío que se va llenando */
+    function iniciarBot(fase){const{bub,wrap}=fila('bot');
+      const b=document.createElement('span');b.className='badge '+(fase==='rag'?'rag':'ctx');
+      b.textContent=fase==='rag'?'🔎 RAG · base vectorial':'🧭 Contexto completo';
+      bub.appendChild(b);bub.appendChild(document.createElement('br'));
+      const s=document.createElement('span');bub.appendChild(s);
+      nombre(wrap,'Santy · Guía IA');return {bub,span:s};}
+    function agregarFuente(bub,fuente){if(!fuente)return;
+      const f=document.createElement('div');f.className='src';f.textContent='📄 Fuente: '+fuente;bub.appendChild(f);}
+    function agregarCitas(bub,citaciones){if(!citaciones||!citaciones.length)return;
+      const det=document.createElement('details');det.className='citas';
+      const sm=document.createElement('summary');sm.textContent=citaciones.length+' fuente(s) citada(s)';det.appendChild(sm);
+      citaciones.forEach(c=>{const cd=document.createElement('div');cd.className='cita';cd.textContent=c.contenido;
+        const mt=document.createElement('div');mt.className='cmeta';mt.textContent='📄 '+c.fuente+' · pág. '+c.pagina;
+        cd.appendChild(mt);det.appendChild(cd);});bub.appendChild(det);}
+
+    /* Envío al agente real — STREAMING (SSE): la respuesta aparece token a token */
     async function preguntar(t){
       msgUser(t); input.value=''; send.disabled=true;
-      const load=cargando();
+      const load=cargando(); const fase=modo==='rag'?'rag':'ctx';
+      let bot=null, acum='', fin=null;
+      const quitarCarga=()=>{if(load&&load.parentNode)load.remove();};
       try{
-        const ep=modo==='rag'?'/rag/ask':'/ask';
+        const ep=modo==='rag'?'/rag/ask/stream':'/ask/stream';
         const r=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify({pregunta:t,session_id:SESSION_ID})});
-        const d=await r.json(); load.remove();
-        if(!r.ok){msgBot('⚠️ '+(d.detail||'Error en el servidor.'));return;}
-        if(modo==='rag'){msgRag(d);lastReply=d.respuesta;}
-        else{msgBot(d.respuesta,d.fuente,'ctx');lastReply=d.respuesta;}
-        if(ttsOn) speak(lastReply);
-      }catch(e){load.remove();msgBot('⚠️ No se pudo conectar con el servidor.');}
+        if(!r.ok||!r.body){quitarCarga();
+          const d=await r.json().catch(()=>({})); msgBot('⚠️ '+(d.detail||'Error en el servidor.')); return;}
+        const reader=r.body.getReader(); const dec=new TextDecoder(); let buf='';
+        while(true){
+          const {done,value}=await reader.read(); if(done)break;
+          buf+=dec.decode(value,{stream:true});
+          let i;
+          while((i=buf.indexOf('\n\n'))>=0){
+            const linea=buf.slice(0,i).trim(); buf=buf.slice(i+2);
+            if(!linea.startsWith('data:'))continue;
+            let data; try{data=JSON.parse(linea.slice(5).trim());}catch(_){continue;}
+            if(data.tipo==='token'){
+              if(!bot){quitarCarga();bot=iniciarBot(fase);}
+              acum+=data.texto; bot.span.textContent=acum; box.scrollTop=box.scrollHeight;
+            }else if(data.tipo==='fin'){fin=data;}
+          }
+        }
+        if(!bot){quitarCarga();bot=iniciarBot(fase);}
+        if(fin){ if(modo==='rag') agregarCitas(bot.bub,fin.citaciones); else agregarFuente(bot.bub,fin.fuente); }
+        lastReply=acum; if(ttsOn) speak(acum);
+      }catch(e){quitarCarga(); if(!bot) msgBot('⚠️ No se pudo conectar con el servidor.');}
       finally{send.disabled=false;input.focus();}
     }
     function enviar(){const t=input.value.trim();if(t)preguntar(t);}

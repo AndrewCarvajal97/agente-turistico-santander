@@ -86,6 +86,21 @@ class TourismAgent:
         )
         return {"respuesta": respuesta, "fuente": self.fuente}
 
+    def preguntar_stream(self, pregunta: str, contexto_conversacion: str = ""):
+        """Igual que `preguntar`, pero hace `yield` de la respuesta en fragmentos (streaming)."""
+        if not self.esta_listo():
+            raise RuntimeError("El documento no está cargado. Llama a indexar() primero.")
+        pregunta = (pregunta or "").strip()
+        if not pregunta:
+            yield "Por favor, escribe una pregunta."
+            return
+        bloques = [f"### Documento de referencia:\n{self.contexto}"]
+        if contexto_conversacion:
+            bloques.append(f"### Memoria de la conversación:\n{contexto_conversacion}")
+        bloques.append(f"### Pregunta del usuario:\n{pregunta}")
+        mensaje = "\n\n".join(bloques)
+        yield from llm.stream_texto(mensaje, SYSTEM_PROMPT, temperature=0.2)
+
     # ------------------------------------------------------------------ #
     # Llamada al modelo (con reintentos)
     # ------------------------------------------------------------------ #

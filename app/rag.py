@@ -307,6 +307,42 @@ class RagSantander:
             _agregar(self._vectorstore.similarity_search(pregunta, k=settings.rag_top_k))
         return documentos
 
+    def recuperar_para_stream(self, pregunta: str, contexto_conversacion: str = ""):
+        """Prepara el streaming RAG: devuelve (inputs_para_la_cadena, documentos).
+
+        Si no hay documentos relevantes, devuelve (None, []). El endpoint transmite la
+        respuesta con ``self.document_chain.stream(inputs)`` y al final calcula las
+        citaciones con ``citaciones_para``.
+        """
+        if not self.esta_listo():
+            self.indexar()
+        pregunta = (pregunta or "").strip()
+        if not pregunta:
+            return None, []
+        documentos = self._recuperar(pregunta)
+        if not documentos:
+            return None, []
+        contexto = "\n\n".join(d.page_content for d in documentos)
+        historial = f"{contexto_conversacion}\n\n" if contexto_conversacion else ""
+        return {"input": pregunta, "context": contexto, "historial": historial}, documentos
+
+    def citaciones_para(self, respuesta: str, documentos) -> list:
+        """Citaciones (fragmento + página + fuente) de los documentos que la respuesta usó."""
+        if respuesta.strip().rstrip(".!?¡¿").lower() in ("no lo sé", "no lo se"):
+            return []
+        terminos_resp = _terminos(respuesta)
+        usados = [
+            d for d in documentos if len(terminos_resp & _terminos(d.page_content)) >= 2
+        ]
+        return [
+            {
+                "contenido": d.page_content[:180].strip() + "…",
+                "pagina": (d.metadata.get("page", 0) or 0) + 1,
+                "fuente": os.path.basename(d.metadata.get("source", "")),
+            }
+            for d in usados
+        ]
+
     def preguntar(self, pregunta: str, contexto_conversacion: str = "") -> dict:
         """Recupera los chunks relevantes y genera la respuesta con citaciones.
 

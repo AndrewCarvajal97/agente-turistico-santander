@@ -184,6 +184,24 @@ def construir_chat_model(temperature: float = 0.2, con_respaldo: bool = True):
     return principal.with_fallbacks(resto) if (con_respaldo and resto) else principal
 
 
+def stream_texto(mensaje: str, system_instruction: str, temperature: float = 0.2):
+    """Genera texto en **streaming**: hace `yield` de cada fragmento a medida que llega.
+
+    Usa la cadena con respaldo (`.with_fallbacks()`); si el primer proveedor falla al
+    iniciar, se cae al siguiente. Pensado para respuestas fluidas token a token.
+    """
+    from langchain_core.output_parsers import StrOutputParser
+    from langchain_core.prompts import ChatPromptTemplate
+
+    prompt = ChatPromptTemplate.from_messages(
+        [("system", "{sistema}"), ("human", "{entrada}")]
+    )
+    cadena = prompt | construir_chat_model(temperature=temperature) | StrOutputParser()
+    for fragmento in cadena.stream({"sistema": system_instruction, "entrada": mensaje}):
+        if fragmento:
+            yield fragmento
+
+
 # --------------------------------------------------------------------- #
 # Punto de entrada
 # --------------------------------------------------------------------- #

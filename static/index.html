@@ -152,6 +152,8 @@
     .pchunk{border-left:3px solid var(--muted);padding:5px 9px;margin:5px 0;background:rgba(255,255,255,.03);border-radius:6px;font-size:.72rem;color:var(--ink)}
     .pchunk .pmeta{font-size:.62rem;color:var(--muted);margin-top:2px;font-weight:600}
     .procline{color:var(--muted);font-size:.72rem;margin:2px 0 8px}
+    .wloading{color:var(--muted);font-size:.85rem}
+    body.hc .wloading{color:#000 !important}
     body.hc details.proceso summary,body.hc .procline,body.hc .pchunk .pmeta{color:#000 !important}
     body.hc .pchunk{border-left-color:#000 !important;color:#000 !important;background:#fff !important}
     .dots{display:inline-flex;gap:5px}
@@ -404,6 +406,10 @@
           cd.appendChild(mt);det.appendChild(cd);});bub.appendChild(det);}
       nombre(wrap,'Santy · Guía IA');box.scrollTop=box.scrollHeight;}
     function cargando(){const{bub,wrap}=fila('bot');bub.innerHTML='<span class="dots"><i></i><i></i><i></i></span>';return wrap.parentNode;}
+    /* Loader con etiqueta (para fases NO streaming como Guía + Web, que tardan unos segundos). */
+    function cargandoTxt(html){const{bub,wrap}=fila('bot');
+      bub.innerHTML='<span class="badge web">🌐 Guía + Web</span><br><span class="wloading">'+html+' <span class="dots"><i></i><i></i><i></i></span></span>';
+      return wrap.parentNode;}
 
     /* Burbuja del bot para streaming: badge + span de texto vacío que se va llenando */
     function iniciarBot(fase){const{bub,wrap}=fila('bot');
@@ -456,7 +462,7 @@
 
     /* Modo web: consulta el grafo combinado (guía + Tavily). No es streaming. */
     async function preguntarWeb(t){
-      const load=cargando();
+      const load=cargandoTxt('Consultando la guía e internet (Tavily) y redactando…');
       try{
         const r=await fetch('/grafo/combinado',{method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify({pregunta:t,session_id:SESSION_ID})});

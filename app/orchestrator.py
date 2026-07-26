@@ -10,7 +10,7 @@ Este orquestador es **paralelo** a los endpoints existentes: se expone en
 """
 from __future__ import annotations
 
-from .config import settings
+from . import llm
 from .tools import HERRAMIENTAS
 
 SYSTEM_ORQUESTADOR = (
@@ -19,28 +19,6 @@ SYSTEM_ORQUESTADOR = (
     "para preguntas sobre turismo usa la guía. Si la herramienta no trae información, dilo "
     "con honestidad."
 )
-
-
-def _modelo_chat():
-    """Construye un chat model de LangChain (con soporte de tool-calling)."""
-    prov = settings.llm_provider.lower()
-    if prov == "cohere" and settings.cohere_api_key:
-        from langchain_cohere import ChatCohere
-
-        return ChatCohere(
-            model=settings.cohere_model, cohere_api_key=settings.cohere_api_key, temperature=0
-        )
-    if prov == "gemini" and settings.gemini_api_key:
-        from langchain_google_genai import ChatGoogleGenerativeAI
-
-        return ChatGoogleGenerativeAI(
-            model=settings.chat_model, google_api_key=settings.gemini_api_key, temperature=0
-        )
-    # Por defecto Groq (Llama soporta tool-calling y tiene buen free tier).
-    from langchain_groq import ChatGroq
-
-    return ChatGroq(model=settings.groq_model, api_key=settings.groq_api_key, temperature=0)
-
 
 _agente_cache = None
 
@@ -51,9 +29,9 @@ def _get_agente():
     if _agente_cache is None:
         from langgraph.prebuilt import create_react_agent
 
-        _agente_cache = create_react_agent(
-            _modelo_chat(), HERRAMIENTAS, prompt=SYSTEM_ORQUESTADOR
-        )
+        # Un solo modelo (los agentes usan bind_tools; sin .with_fallbacks()).
+        modelo = llm.construir_chat_model(temperature=0, con_respaldo=False)
+        _agente_cache = create_react_agent(modelo, HERRAMIENTAS, prompt=SYSTEM_ORQUESTADOR)
     return _agente_cache
 
 

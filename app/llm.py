@@ -140,6 +140,51 @@ def _cadena_intentos() -> list[tuple[str, str]]:
 
 
 # --------------------------------------------------------------------- #
+# Chat models de LangChain (para cadenas y agentes que necesitan el objeto)
+# --------------------------------------------------------------------- #
+def _construir_modelo(proveedor: str, modelo: str, temperature: float = 0.2):
+    """Crea un chat model de LangChain para un (proveedor, modelo) concreto."""
+    if proveedor == "gemini":
+        from langchain_google_genai import ChatGoogleGenerativeAI
+
+        return ChatGoogleGenerativeAI(
+            model=modelo,
+            google_api_key=settings.gemini_api_key,
+            temperature=temperature,
+            max_output_tokens=settings.max_output_tokens,
+        )
+    if proveedor == "cohere":
+        from langchain_cohere import ChatCohere
+
+        return ChatCohere(
+            model=modelo, cohere_api_key=settings.cohere_api_key, temperature=temperature
+        )
+    from langchain_groq import ChatGroq
+
+    return ChatGroq(
+        model=modelo,
+        api_key=settings.groq_api_key,
+        temperature=temperature,
+        max_tokens=min(settings.max_output_tokens, 1024),
+    )
+
+
+def construir_chat_model(temperature: float = 0.2, con_respaldo: bool = True):
+    """Devuelve un chat model de LangChain para el proveedor activo.
+
+    Con `con_respaldo=True` encadena el resto de proveedores con `.with_fallbacks()`
+    (útil para cadenas simples). Para agentes que usan `bind_tools`, pasar
+    `con_respaldo=False` (un solo modelo).
+    """
+    cadena = _cadena_intentos()
+    if not cadena:
+        raise SinCupoError("no hay proveedores configurados")
+    modelos = [_construir_modelo(p, m, temperature) for p, m in cadena]
+    principal, resto = modelos[0], modelos[1:]
+    return principal.with_fallbacks(resto) if (con_respaldo and resto) else principal
+
+
+# --------------------------------------------------------------------- #
 # Punto de entrada
 # --------------------------------------------------------------------- #
 def _intentar_modelo(generar, mensaje, system_instruction, max_tokens, modelo, reintentos=2):

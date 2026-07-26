@@ -266,10 +266,12 @@ en `POST /rag/ask` ([rag.py](app/rag.py)): el documento se divide en *chunks*
 (`RecursiveCharacterTextSplitter`), cada chunk se convierte en un **vector semántico** con
 **embeddings de Cohere** (o Gemini, configurable), y se indexa en **FAISS**. La recuperación
 usa un *retriever* con **umbral de similitud** (`similarity_score_threshold`): por cada
-pregunta se traen solo los chunks realmente relevantes y esos se pasan al LLM para **generar**
-la respuesta. Si nada supera el umbral, responde con honestidad que no encontró información
-(evita alucinar). La respuesta incluye los `fragmentos` recuperados. Es la técnica adecuada
-para escalar a documentos grandes o a múltiples fuentes (requiere `COHERE_API_KEY`).
+pregunta se traen solo los chunks realmente relevantes y esos se pasan al LLM (con una cadena
+*stuff* en LCEL: `prompt | modelo | StrOutputParser`) para **generar** la respuesta. La
+respuesta es estructurada: `{respuesta, citaciones, documentos_encontrados}`. Si nada supera
+el umbral —o si el modelo no halla la respuesta en el contexto— devuelve **"No lo sé"** con
+`documentos_encontrados: false` (evita alucinar). Es la técnica adecuada para escalar a
+documentos grandes o múltiples fuentes (requiere `COHERE_API_KEY`).
 
 ## 🗺️ Roadmap / próximos pasos
 

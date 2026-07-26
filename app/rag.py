@@ -19,9 +19,9 @@ from .config import settings
 from .pdf_loader import leer_pdf
 
 SYSTEM_PROMPT_RAG = (
-    "Eres un asistente turístico experto en Santander, Colombia. Responde en español, "
-    "de forma clara y concisa, ÚNICAMENTE con la información del contexto recuperado. "
-    "Si no está en el contexto, indícalo con honestidad."
+    "Eres un asistente turístico experto en Santander, Colombia. Responde en español, de "
+    "forma clara y concisa, ÚNICAMENTE con la información del contexto proporcionado. "
+    "Si la respuesta no está en el contexto, responde exactamente 'No lo sé'."
 )
 
 
@@ -30,6 +30,7 @@ class RagSantander:
 
     def __init__(self) -> None:
         self.retriever = None
+        self.document_chain = None
 
     def _embeddings(self):
         """Modelo de embeddings: Cohere por defecto (gratis en el trial) o Gemini."""
@@ -48,9 +49,11 @@ class RagSantander:
         )
 
     def indexar(self, pdf_path: str | None = None) -> int:
-        """Carga el PDF, lo divide en chunks, construye FAISS y crea el retriever."""
+        """Carga el PDF, lo divide en chunks, construye FAISS, el retriever y la cadena."""
         from langchain_community.vectorstores import FAISS
         from langchain_core.documents import Document
+        from langchain_core.output_parsers import StrOutputParser
+        from langchain_core.prompts import ChatPromptTemplate
         from langchain_text_splitters import RecursiveCharacterTextSplitter
 
         texto = leer_pdf(pdf_path or settings.pdf_path)
@@ -68,34 +71,56 @@ class RagSantander:
                 "k": settings.rag_top_k,
             },
         )
+        # Cadena "stuff" (equivalente moderno de create_stuff_documents_chain en LCEL):
+        # inserta los documentos recuperados en {context} y genera la respuesta.
+        prompt_rag = ChatPromptTemplate(
+            [
+                ("system", SYSTEM_PROMPT_RAG),
+                ("human", "Contexto:\n{context}\n\nPregunta: {input}"),
+            ]
+        )
+        self.document_chain = (
+            prompt_rag | llm.construir_chat_model(temperature=0.2) | StrOutputParser()
+        )
         return len(fragmentos)
 
     def esta_listo(self) -> bool:
         return self.retriever is not None
 
+    @staticmethod
+    def _no_encontrado(respuesta: str = "No lo sé.") -> dict:
+        return {"respuesta": respuesta, "citaciones": [], "documentos_encontrados": False}
+
     def preguntar(self, pregunta: str) -> dict:
-        """Recupera los chunks más relevantes (retriever) y genera la respuesta."""
+        """Recupera los chunks relevantes y genera la respuesta con citaciones.
+
+        Returns:
+            {"respuesta": str, "citaciones": list[str], "documentos_encontrados": bool}
+        """
         if not self.esta_listo():
             self.indexar()  # indexación perezosa (en la primera consulta)
 
         pregunta = (pregunta or "").strip()
         if not pregunta:
-            return {"respuesta": "Por favor, escribe una pregunta.", "fragmentos": []}
+            return self._no_encontrado("Por favor, escribe una pregunta.")
 
-        encontrados = self.retriever.invoke(pregunta)
-        if not encontrados:
-            return {
-                "respuesta": "No encontré información suficientemente relevante en la guía "
-                "para responder esa pregunta.",
-                "fragmentos": [],
-            }
-        contexto = "\n\n---\n\n".join(d.page_content for d in encontrados)
+        # 1) Recuperación: si nada supera el umbral, respondemos "No lo sé".
+        documentos = self.retriever.invoke(pregunta)
+        if not documentos:
+            return self._no_encontrado()
 
-        mensaje = f"### Contexto recuperado:\n{contexto}\n\n### Pregunta:\n{pregunta}"
-        respuesta = llm.generar_texto(mensaje, SYSTEM_PROMPT_RAG, settings.max_output_tokens)
+        # 2) Generación: se "rellenan" (stuff) los documentos recuperados en el contexto.
+        contexto = "\n\n".join(d.page_content for d in documentos)
+        respuesta = self.document_chain.invoke({"input": pregunta, "context": contexto})
+
+        # 3) El modelo también puede decir "No lo sé" si el contexto no sirve.
+        if respuesta.strip().rstrip(".!?¡¿").lower() in ("no lo sé", "no lo se"):
+            return self._no_encontrado()
+
         return {
             "respuesta": respuesta,
-            "fragmentos": [d.page_content[:180].strip() + "…" for d in encontrados],
+            "citaciones": [d.page_content[:180].strip() + "…" for d in documentos],
+            "documentos_encontrados": True,
         }
 
 

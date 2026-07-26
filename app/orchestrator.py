@@ -40,8 +40,9 @@ def _get_agente():
         from langgraph.checkpoint.memory import MemorySaver
         from langgraph.prebuilt import create_react_agent
 
-        # Un solo modelo (los agentes usan bind_tools; sin .with_fallbacks()).
-        modelo = llm.construir_chat_model(temperature=0, con_respaldo=False)
+        # Modelo con las tools atadas + RESPALDO entre proveedores (Groq→Gemini→Cohere):
+        # si el activo se queda sin cupo, el agente cae al siguiente (igual que /ask y /rag).
+        modelo = llm.construir_modelo_con_tools(HERRAMIENTAS, temperature=0)
         _agente_cache = create_react_agent(
             modelo, HERRAMIENTAS, prompt=SYSTEM_ORQUESTADOR, checkpointer=MemorySaver()
         )

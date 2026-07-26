@@ -184,6 +184,22 @@ def construir_chat_model(temperature: float = 0.2, con_respaldo: bool = True):
     return principal.with_fallbacks(resto) if (con_respaldo and resto) else principal
 
 
+def construir_modelo_con_tools(tools, temperature: float = 0):
+    """Modelo con `tools` atadas y **respaldo entre proveedores**.
+
+    `bind_tools` necesita un modelo concreto (no acepta `RunnableWithFallbacks`), así que
+    atamos las herramientas a CADA proveedor disponible y luego combinamos los modelos
+    atados con `.with_fallbacks()`. Si el proveedor activo se queda sin cupo (429), el
+    agente cae al siguiente — igual que el resto del sistema.
+    """
+    cadena = _cadena_intentos()
+    if not cadena:
+        raise SinCupoError("no hay proveedores configurados")
+    atados = [_construir_modelo(p, m, temperature).bind_tools(tools) for p, m in cadena]
+    principal, resto = atados[0], atados[1:]
+    return principal.with_fallbacks(resto) if resto else principal
+
+
 def stream_texto(mensaje: str, system_instruction: str, temperature: float = 0.2):
     """Genera texto en **streaming**: hace `yield` de cada fragmento a medida que llega.
 

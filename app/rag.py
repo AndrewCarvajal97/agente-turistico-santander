@@ -29,19 +29,26 @@ class RagSantander:
     """Índice vectorial (FAISS) del documento y recuperación semántica."""
 
     def __init__(self) -> None:
-        self.vectorstore = None
+        self.retriever = None
 
     def _embeddings(self):
+        """Modelo de embeddings: Cohere por defecto (gratis en el trial) o Gemini."""
+        if settings.rag_embed_provider.lower() == "gemini" and settings.gemini_api_key:
+            from langchain_google_genai import GoogleGenerativeAIEmbeddings
+
+            return GoogleGenerativeAIEmbeddings(
+                model="models/gemini-embedding-001", google_api_key=settings.gemini_api_key
+            )
         from langchain_cohere import CohereEmbeddings
 
         if not settings.cohere_api_key:
-            raise ValueError("El RAG usa embeddings de Cohere: falta COHERE_API_KEY.")
+            raise ValueError("El RAG necesita COHERE_API_KEY (o RAG_EMBED_PROVIDER=gemini).")
         return CohereEmbeddings(
             cohere_api_key=settings.cohere_api_key, model=settings.cohere_embed_model
         )
 
     def indexar(self, pdf_path: str | None = None) -> int:
-        """Carga el PDF, lo divide en chunks y construye el índice FAISS."""
+        """Carga el PDF, lo divide en chunks, construye FAISS y crea el retriever."""
         from langchain_community.vectorstores import FAISS
         from langchain_core.documents import Document
         from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -52,14 +59,22 @@ class RagSantander:
         )
         fragmentos = splitter.split_text(texto)
         documentos = [Document(page_content=f) for f in fragmentos]
-        self.vectorstore = FAISS.from_documents(documentos, self._embeddings())
+        vectorstore = FAISS.from_documents(documentos, self._embeddings())
+        # Retriever con umbral de similitud: descarta fragmentos poco relevantes.
+        self.retriever = vectorstore.as_retriever(
+            search_type="similarity_score_threshold",
+            search_kwargs={
+                "score_threshold": settings.rag_score_threshold,
+                "k": settings.rag_top_k,
+            },
+        )
         return len(fragmentos)
 
     def esta_listo(self) -> bool:
-        return self.vectorstore is not None
+        return self.retriever is not None
 
-    def preguntar(self, pregunta: str, k: int | None = None) -> dict:
-        """Recupera los chunks más relevantes y genera la respuesta."""
+    def preguntar(self, pregunta: str) -> dict:
+        """Recupera los chunks más relevantes (retriever) y genera la respuesta."""
         if not self.esta_listo():
             self.indexar()  # indexación perezosa (en la primera consulta)
 
@@ -67,8 +82,13 @@ class RagSantander:
         if not pregunta:
             return {"respuesta": "Por favor, escribe una pregunta.", "fragmentos": []}
 
-        k = k or settings.rag_top_k
-        encontrados = self.vectorstore.similarity_search(pregunta, k=k)
+        encontrados = self.retriever.invoke(pregunta)
+        if not encontrados:
+            return {
+                "respuesta": "No encontré información suficientemente relevante en la guía "
+                "para responder esa pregunta.",
+                "fragmentos": [],
+            }
         contexto = "\n\n---\n\n".join(d.page_content for d in encontrados)
 
         mensaje = f"### Contexto recuperado:\n{contexto}\n\n### Pregunta:\n{pregunta}"

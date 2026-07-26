@@ -264,10 +264,12 @@ datos), y cada herramienta puede usar el LLM que mejor le sirva.
 Además del enfoque de **contexto completo** de `/ask`, el proyecto incluye un **RAG clásico**
 en `POST /rag/ask` ([rag.py](app/rag.py)): el documento se divide en *chunks*
 (`RecursiveCharacterTextSplitter`), cada chunk se convierte en un **vector semántico** con
-**embeddings de Cohere**, y se indexa en **FAISS**. Por cada pregunta se recuperan los chunks
-más similares (*retrieval*) y solo esos se pasan al LLM para **generar** la respuesta. La
-respuesta incluye los `fragmentos` recuperados. Es la técnica adecuada para escalar a
-documentos grandes o a múltiples fuentes (requiere `COHERE_API_KEY`).
+**embeddings de Cohere** (o Gemini, configurable), y se indexa en **FAISS**. La recuperación
+usa un *retriever* con **umbral de similitud** (`similarity_score_threshold`): por cada
+pregunta se traen solo los chunks realmente relevantes y esos se pasan al LLM para **generar**
+la respuesta. Si nada supera el umbral, responde con honestidad que no encontró información
+(evita alucinar). La respuesta incluye los `fragmentos` recuperados. Es la técnica adecuada
+para escalar a documentos grandes o a múltiples fuentes (requiere `COHERE_API_KEY`).
 
 ## 🗺️ Roadmap / próximos pasos
 

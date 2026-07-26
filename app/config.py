@@ -45,9 +45,13 @@ class Settings:
     cohere_embed_model: str = _get("COHERE_EMBED_MODEL", "embed-multilingual-v3.0")
 
     # --- RAG (recuperación por embeddings + FAISS), vía paralela a /ask ---
+    # Proveedor de embeddings: "cohere" (gratis en el trial) o "gemini".
+    rag_embed_provider: str = _get("RAG_EMBED_PROVIDER", "cohere")
     rag_chunk_size: int = int(_get("RAG_CHUNK_SIZE", "800") or 800)
     rag_chunk_overlap: int = int(_get("RAG_CHUNK_OVERLAP", "100") or 100)
     rag_top_k: int = int(_get("RAG_TOP_K", "4") or 4)
+    # Umbral mínimo de similitud (0-1) para considerar un fragmento relevante.
+    rag_score_threshold: float = float(_get("RAG_SCORE_THRESHOLD", "0.3") or 0.3)
 
     # Documento fuente
     pdf_path: str = _get("PDF_PATH", "data/guia_turistica_santander.pdf")

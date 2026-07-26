@@ -57,9 +57,11 @@ class Settings:
     rag_chunking: str = _get("RAG_CHUNKING", "recursive")
     rag_chunk_size: int = int(_get("RAG_CHUNK_SIZE", "800") or 800)
     rag_chunk_overlap: int = int(_get("RAG_CHUNK_OVERLAP", "100") or 100)
-    rag_top_k: int = int(_get("RAG_TOP_K", "4") or 4)
-    # Umbral mínimo de similitud (0-1) para considerar un fragmento relevante.
-    rag_score_threshold: float = float(_get("RAG_SCORE_THRESHOLD", "0.3") or 0.3)
+    rag_top_k: int = int(_get("RAG_TOP_K", "5") or 5)
+    # Umbral mínimo de similitud (0-1). Con 0 (por defecto) se usa `similarity` top-k
+    # puro (mejor recall; el prompt estricto + doble chequeo "No lo sé" evitan alucinar).
+    # Con un valor > 0 se usa `similarity_score_threshold` y se descartan los flojos.
+    rag_score_threshold: float = float(_get("RAG_SCORE_THRESHOLD", "0") or 0)
     # Multi-query (RAG avanzado, opt-in): reescribe la pregunta en varias versiones y
     # une los documentos recuperados. Mejora el recall a costa de una llamada extra al LLM.
     rag_multiquery: bool = _get("RAG_MULTIQUERY", "false").lower() == "true"

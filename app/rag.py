@@ -188,14 +188,22 @@ class RagSantander:
             )
         vectorstore, n_fragmentos = backends[backend](embeddings, docs_dir, forzar)
 
-        # Retriever con umbral de similitud: descarta fragmentos poco relevantes.
-        self.retriever = vectorstore.as_retriever(
-            search_type="similarity_score_threshold",
-            search_kwargs={
-                "score_threshold": settings.rag_score_threshold,
-                "k": settings.rag_top_k,
-            },
-        )
+        # Retriever: por defecto `similarity` top-k (mejor recall). Si se configura un
+        # umbral (>0) se usa `similarity_score_threshold` para descartar los flojos. Ojo:
+        # en FAISS el score es distancia L2 (no cosine), por lo que un umbral alto puede
+        # filtrar fragmentos válidos; por eso el umbral está desactivado por defecto.
+        if settings.rag_score_threshold > 0:
+            self.retriever = vectorstore.as_retriever(
+                search_type="similarity_score_threshold",
+                search_kwargs={
+                    "score_threshold": settings.rag_score_threshold,
+                    "k": settings.rag_top_k,
+                },
+            )
+        else:
+            self.retriever = vectorstore.as_retriever(
+                search_type="similarity", search_kwargs={"k": settings.rag_top_k}
+            )
         # Cadena "stuff" (equivalente moderno de create_stuff_documents_chain en LCEL):
         # inserta los documentos recuperados en {context} y genera la respuesta.
         prompt_rag = ChatPromptTemplate(

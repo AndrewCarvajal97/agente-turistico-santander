@@ -84,6 +84,9 @@ class Settings:
     # Clave de administrador para acciones protegidas (p. ej. análisis de datos).
     admin_key: str = _get("ADMIN_KEY")
 
+    # Tavily: búsqueda web para el agente orquestador (info actual que no está en el PDF).
+    tavily_api_key: str = _get("TAVILY_API_KEY")
+
     # LangSmith (observabilidad): LangChain lo activa por sí solo leyendo LANGSMITH_*
     # de las variables de entorno (cargadas por load_dotenv). Esto es solo para reportar
     # su estado; opt-in con LANGSMITH_TRACING=true.

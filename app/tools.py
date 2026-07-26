@@ -76,5 +76,35 @@ def explicar(tema: str) -> str:
     )
 
 
+@tool
+def busca_web(consulta: str) -> str:
+    """Busca información ACTUAL en internet (eventos y ferias próximas, clima de hoy, precios
+    vigentes, noticias recientes) que NO está en la guía turística en PDF. Úsala SOLO cuando
+    la pregunta necesite datos recientes o en tiempo real; para lo estático de Santander
+    (destinos, gastronomía, rutas) usa la herramienta guia_turistica. Cita siempre la fuente."""
+    if not settings.tavily_api_key:
+        return "La búsqueda web no está disponible ahora (falta configurar TAVILY_API_KEY)."
+    try:
+        from langchain_tavily import TavilySearch
+
+        buscador = TavilySearch(
+            max_results=3, tavily_api_key=settings.tavily_api_key, topic="general"
+        )
+        # Enfoca la búsqueda en el contexto del proyecto para resultados más útiles.
+        datos = buscador.invoke({"query": f"{consulta} en Santander, Colombia"})
+        resultados = datos.get("results", []) if isinstance(datos, dict) else (datos or [])
+        if not resultados:
+            return "No encontré resultados web para esa consulta."
+        lineas = []
+        for r in resultados[:3]:
+            titulo = (r.get("title") or "").strip()
+            url = (r.get("url") or "").strip()
+            resumen = (r.get("content") or "").strip()[:220]
+            lineas.append(f"- {titulo}\n  {resumen}\n  Fuente: {url}")
+        return "\n".join(lineas)
+    except Exception as exc:  # noqa: BLE001 - la búsqueda web no debe tumbar al agente
+        return f"No pude completar la búsqueda web en este momento ({exc})."
+
+
 # Lista de herramientas disponibles para el orquestador.
-HERRAMIENTAS = [guia_turistica, buscar_historial, explicar]
+HERRAMIENTAS = [guia_turistica, buscar_historial, explicar, busca_web]

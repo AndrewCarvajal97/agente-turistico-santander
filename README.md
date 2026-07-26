@@ -89,6 +89,7 @@ alura-latam/
 │   ├── llm.py           # Capa LLM con LangChain (Gemini/Groq/Cohere + fallback)
 │   ├── tools.py         # Herramientas del agente orquestador (LangChain Tools)
 │   ├── orchestrator.py  # Agente ReAct con LangGraph (endpoint /agente, paralelo)
+│   ├── graph.py         # Agente con grafo de estados: triaje + RAG (/grafo/ask)
 │   └── config.py        # Configuración desde variables de entorno
 ├── static/index.html    # Interfaz web de chat
 ├── tests/test_agent.py  # Tests unitarios (sin llamar a la API)
@@ -273,6 +274,24 @@ es trazable (fragmento + **página** + archivo, vía `PyPDFLoader` + `split_docu
 el umbral —o si el modelo no halla la respuesta en el contexto— devuelve **"No lo sé"** con
 `documentos_encontrados: false` (evita alucinar). Es la técnica adecuada para escalar a
 documentos grandes o múltiples fuentes (requiere `COHERE_API_KEY`).
+
+## 🕸️ Agente con grafo de estados (LangGraph) — vía paralela
+
+En `POST /grafo/ask` ([graph.py](app/graph.py)) hay un agente modelado como un **grafo de
+estados** con `StateGraph` (LangGraph). El flujo es determinista y conecta todo lo construido:
+
+```
+START → triaje → (arista condicional)
+                   ├─ auto_resolver → responde con el RAG (con citaciones)
+                   ├─ pedir_info    → pide más detalles al usuario
+                   └─ abrir_ticket  → registra la solicitud (gestión humana)
+                                      → END
+```
+
+El **triaje** clasifica la consulta con `with_structured_output` (Pydantic + `Literal`:
+`auto_resolver` / `pedir_info` / `abrir_ticket`), y una **arista condicional** enruta al nodo
+correspondiente. El estado se propaga con un `TypedDict` (`AgentState`). Validado en vivo: cada
+tipo de consulta se enruta al nodo correcto.
 
 ## 🗺️ Roadmap / próximos pasos
 

@@ -9,6 +9,7 @@ Endpoints:
   GET  /history        -> lista/busca las conversaciones guardadas
   POST /admin/analisis -> categoriza las preguntas (admin, requiere clave)
   POST /agente         -> agente orquestador ReAct (LangGraph, paralelo)
+  POST /grafo/ask      -> agente con grafo de estados (triaje + RAG, paralelo)
   POST /reload         -> recarga el documento fuente
 """
 from __future__ import annotations
@@ -236,6 +237,27 @@ def agente_endpoint(entrada: PreguntaIn) -> dict:
             status_code=503,
             detail="El agente orquestador no está disponible ahora (posible límite de "
             "cuota del LLM). Intenta más tarde.",
+        )
+
+
+@app.post("/grafo/ask")
+def grafo_ask(entrada: PreguntaIn) -> dict:
+    """Agente con grafo de estados (LangGraph): triaje → RAG / pedir info / ticket.
+
+    Vía PARALELA. El triaje clasifica la consulta y el grafo la enruta al nodo
+    adecuado. Devuelve {respuesta, decision, accion_final, citaciones}.
+    """
+    try:
+        from . import graph  # import perezoso (solo si se usa el grafo)
+
+        return graph.responder(entrada.pregunta)
+    except llm.SinCupoError:
+        raise HTTPException(status_code=503, detail=MSG_SIN_CUPO)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[grafo] error -> {exc}")
+        raise HTTPException(
+            status_code=503,
+            detail="El agente con grafo no está disponible ahora (límite de cuota o config).",
         )
 
 

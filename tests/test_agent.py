@@ -220,3 +220,13 @@ def test_rag_sin_indexar():
     from app.rag import RagSantander
 
     assert RagSantander().esta_listo() is False
+
+
+# ------------------------ Grafo de estados (LangGraph) ---------------------- #
+def test_grafo_arista_decision_enruta():
+    from app.graph import arista_decision_triaje
+
+    assert arista_decision_triaje({"triaje": {"decision": "auto_resolver"}}) == "rag"
+    assert arista_decision_triaje({"triaje": {"decision": "pedir_info"}}) == "info"
+    assert arista_decision_triaje({"triaje": {"decision": "abrir_ticket"}}) == "ticket"
+    assert arista_decision_triaje({}) == "rag"  # por defecto, intenta resolver

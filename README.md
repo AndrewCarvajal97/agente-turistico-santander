@@ -4,8 +4,10 @@ Agente de inteligencia artificial que responde preguntas sobre los **sitios tur�
 del departamento de Santander, Colombia**, a partir del contenido de un documento PDF.
 Está orquestado con **LangChain** y puede usar varios modelos de lenguaje (**Gemini**,
 **Groq** o **Cohere**) con respaldo automático entre ellos. Se expone mediante una **API con
-FastAPI** con interfaz web de chat, incluye **análisis de imágenes** (Gemini visión) y un
-**agente con herramientas**, y se despliega en **Oracle Cloud Infrastructure (OCI Compute)**.
+FastAPI** con interfaz web de chat, e incluye **análisis de imágenes** (Gemini visión),
+**RAG con base vectorial** (FAISS/Pinecone), varios **agentes con herramientas** (ReAct y grafo
+de estados) y un **agente de análisis de datos** sobre el historial de conversaciones. Se
+despliega en **Oracle Cloud Infrastructure (OCI Compute)**.
 
 > Proyecto desarrollado para el **Challenge Alura Agente**.
 
@@ -30,7 +32,7 @@ evita que el modelo invente información fuera del documento.
 ```
                           ┌─────────────────────────────────────────┐
    Usuario  ──HTTP──────▶ │              FastAPI (app)               │
- (navegador / API)        │  /  /ask  /vision  /history  /admin  /agente │
+ (navegador / API)        │  / /ask /rag/ask /vision /grafo /datos … │
                           └───────┬───────────────┬─────────────────┘
                                   │               │
               ┌───────────────────┘               └───────────────┐
@@ -49,8 +51,11 @@ evita que el modelo invente información fuera del documento.
              ▼
      Respuesta en lenguaje natural
 
-  Extras:  /vision → Gemini multimodal (JSON estructurado)
-           /agente → agente ReAct (LangGraph) que elige herramientas
+  Extras:  /vision        → Gemini multimodal (JSON estructurado)
+           /rag/ask        → RAG con base vectorial (FAISS/Pinecone) + citaciones
+           /agente         → agente ReAct (LangGraph) que elige herramientas
+           /grafo/ask      → agente con grafo de estados (triaje + RAG)
+           /datos/analizar → agente de análisis de datos (router + pandas/gráficos)
 ```
 
 **Flujo:**
@@ -90,6 +95,7 @@ alura-latam/
 │   ├── tools.py         # Herramientas del agente orquestador (LangChain Tools)
 │   ├── orchestrator.py  # Agente ReAct con LangGraph (endpoint /agente, paralelo)
 │   ├── graph.py         # Agente con grafo de estados: triaje + RAG (/grafo/ask)
+│   ├── datos.py         # Agente de análisis de datos (router + 4 herramientas) — /datos/analizar
 │   └── config.py        # Configuración desde variables de entorno
 ├── static/index.html    # Interfaz web de chat
 ├── tests/test_agent.py  # Tests unitarios (sin llamar a la API)
@@ -117,8 +123,9 @@ alura-latam/
 | Lectura de PDF   | pypdf                                         |
 | RAG / vectores   | **FAISS** (persistido) o **Pinecone** (nube) + embeddings de Cohere |
 | Memoria / datos  | pandas (CSV de sesiones, filtros)             |
+| Análisis de datos| **PythonAstREPLTool** (ejecuta pandas) + matplotlib/seaborn (gráficos) |
 | Nube / Deploy    | Oracle Cloud Infrastructure (OCI Compute)     |
-| Frontend         | HTML + CSS + JavaScript (vanilla)             |
+| Frontend         | HTML + CSS + JavaScript (vanilla, con selector de fase RAG) |
 | Testing          | pytest                                        |
 
 ---
@@ -277,6 +284,10 @@ el umbral —o si el modelo no halla la respuesta en el contexto— devuelve **"
 `documentos_encontrados: false` (evita alucinar). Es la técnica adecuada para escalar a
 documentos grandes o múltiples fuentes (requiere `COHERE_API_KEY`).
 
+> 🖥️ **En el frontend**, un **selector de fase** permite elegir entre *"Contexto completo"*
+> (`/ask`) y *"RAG · base vectorial"* (`/rag/ask`); la fase RAG muestra la respuesta con sus
+> **citaciones** (página + fuente) desplegables, diferenciando visualmente ambos enfoques.
+
 ### 🗄️ Base vectorial intercambiable (patrón *strategy*)
 
 El backend de la base vectorial se elige con `RAG_VECTORSTORE`, sin tocar el resto del pipeline:
@@ -330,9 +341,34 @@ si no, según la consulta abre un ticket (palabras como "reservar") o pide más 
 ticket incluye la **urgencia** del triaje. El estado se propaga con un `TypedDict` (`AgentState`).
 El endpoint `GET /grafo/diagrama` devuelve el grafo en Mermaid. Validado en vivo.
 
+## 📊 Agente de análisis de datos — vía paralela
+
+En `POST /datos/analizar` ([datos.py](app/datos.py)) hay un **agente de análisis de datos** que
+automatiza el análisis exploratorio, aplicado a los **datos reales del proyecto**: por defecto el
+**historial de conversaciones** (`data/historial.csv`) — *qué preguntan los usuarios, por sesión,
+cuándo* — o un CSV que se suba. Un **router** clasifica la solicitud (con salida estructurada
+`Literal`, como el triaje del grafo) y la enruta a una de **4 herramientas**:
+
+| Herramienta (`accion`) | Qué hace |
+|---|---|
+| `explorar` | Reporte general: dimensiones, columnas y tipos, nulos, cadenas `'nan'`, duplicados. |
+| `estadisticas` | Interpreta `df.describe()` de las columnas numéricas. |
+| `grafico` | El LLM genera código **matplotlib/seaborn**, se **ejecuta** y devuelve un **PNG** (base64). |
+| `pregunta` | El LLM genera código pandas, la herramienta **PythonAstREPLTool lo EJECUTA** sobre el `df` (no alucina el cálculo) y responde en lenguaje natural. |
+| `auto` | El **router** elige sola la herramienta según la solicitud. |
+
+Aplica las técnicas del curso *"LangChain: automatizando el análisis de datos con agentes"*:
+`PythonAstREPLTool`, `bind_tools` + `JsonOutputKeyToolsParser`, herramientas personalizadas con
+su prompt, y un agente que enruta al catálogo. Se añaden mejoras propias: **saneo del código**
+(descarta intentos de recrear el `df`), **respaldo entre proveedores** y respuestas **en español**.
+
+> ⚠️ Ejecuta código Python generado por el LLM, por lo que el endpoint está **protegido con
+> `ADMIN_KEY`** y con límite de tamaño (2 MB). No exponer al público sin un sandbox.
+
 ## 🗺️ Roadmap / próximos pasos
 
 - Sumar herramientas al orquestador (p. ej. consulta a una base de datos).
+- Interfaz visual dedicada para el agente de análisis de datos (subida de CSV + botones).
 
 ---
 

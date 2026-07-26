@@ -43,7 +43,9 @@ SYSTEM_PROMPT_RAG = (
     "prepararse para acampar o hacer senderismo) aunque no estén textualmente en el contexto. "
     "No inventes datos específicos (precios, horarios, lugares concretos) que no estén en el "
     "contexto. Responde exactamente 'No lo sé' SOLO cuando te pidan un dato ESPECÍFICO de "
-    "Santander que no esté en el contexto y que no puedas cubrir con un consejo general útil."
+    "Santander que no esté en el contexto y que no puedas cubrir con un consejo general útil. "
+    "Si se te proporciona el historial de la conversación, tenlo en cuenta para entender "
+    "preguntas de seguimiento (referencias como 'eso', 'ahí', 'y entonces', 'para eso')."
 )
 
 # Multi-query (RAG avanzado): una LLM reescribe la pregunta en varias versiones para
@@ -228,7 +230,10 @@ class RagSantander:
         prompt_rag = ChatPromptTemplate(
             [
                 ("system", SYSTEM_PROMPT_RAG),
-                ("human", "Contexto:\n{context}\n\nPregunta: {input}"),
+                (
+                    "human",
+                    "{historial}Contexto de la guía:\n{context}\n\nPregunta actual: {input}",
+                ),
             ]
         )
         self.document_chain = (
@@ -302,8 +307,12 @@ class RagSantander:
             _agregar(self._vectorstore.similarity_search(pregunta, k=settings.rag_top_k))
         return documentos
 
-    def preguntar(self, pregunta: str) -> dict:
+    def preguntar(self, pregunta: str, contexto_conversacion: str = "") -> dict:
         """Recupera los chunks relevantes y genera la respuesta con citaciones.
+
+        Args:
+            pregunta: la pregunta del usuario.
+            contexto_conversacion: memoria de la sesión (para entender preguntas de seguimiento).
 
         Returns:
             {"respuesta": str, "citaciones": list[str], "documentos_encontrados": bool}
@@ -320,9 +329,13 @@ class RagSantander:
         if not documentos:
             return self._no_encontrado()
 
-        # 2) Generación: se "rellenan" (stuff) los documentos recuperados en el contexto.
+        # 2) Generación: se "rellenan" (stuff) los documentos recuperados en el contexto,
+        # anteponiendo el historial de la conversación para las preguntas de seguimiento.
         contexto = "\n\n".join(d.page_content for d in documentos)
-        respuesta = self.document_chain.invoke({"input": pregunta, "context": contexto})
+        historial = f"{contexto_conversacion}\n\n" if contexto_conversacion else ""
+        respuesta = self.document_chain.invoke(
+            {"input": pregunta, "context": contexto, "historial": historial}
+        )
 
         # 3) El modelo también puede decir "No lo sé" si el contexto no sirve.
         if respuesta.strip().rstrip(".!?¡¿").lower() in ("no lo sé", "no lo se"):

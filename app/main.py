@@ -211,16 +211,30 @@ def admin_analisis(entrada: AdminIn) -> dict:
 
 
 @app.post("/rag/ask")
-def rag_ask(entrada: PreguntaIn) -> dict:
+def rag_ask(entrada: PreguntaIn, request: Request) -> dict:
     """RAG real: recupera los chunks más relevantes (embeddings + FAISS) y responde.
 
     Vía PARALELA a /ask (que usa contexto completo). Útil para documentos grandes.
-    Usa embeddings de Cohere, así que requiere COHERE_API_KEY.
+    Usa embeddings de Cohere, así que requiere COHERE_API_KEY. Mantiene **memoria** de la
+    conversación (scopeada a la fase RAG con ``:rag`` para no mezclarla con la de /ask).
     """
     try:
         from .rag import rag  # import perezoso (solo si se usa el RAG)
 
-        return rag.preguntar(entrada.pregunta)
+        session_id = entrada.session_id.strip()
+        ip = request.client.host if request.client else ""
+        # Memoria por fase: clave ":rag" distinta de la de /ask (respeta el "limpiar al cambiar").
+        clave_mem = f"{session_id}:rag" if session_id else ""
+        contexto_conv = memory.construir_contexto(clave_mem) if clave_mem else ""
+
+        resultado = rag.preguntar(entrada.pregunta, contexto_conversacion=contexto_conv)
+
+        if clave_mem and resultado.get("respuesta"):
+            try:
+                memory.guardar_turno(clave_mem, entrada.pregunta, resultado["respuesta"], ip=ip)
+            except Exception as exc:  # noqa: BLE001
+                print(f"[memory] rag no pudo guardar -> {exc}")
+        return resultado
     except llm.SinCupoError:
         raise HTTPException(status_code=503, detail=MSG_SIN_CUPO)
     except Exception as exc:  # noqa: BLE001

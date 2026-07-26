@@ -178,29 +178,29 @@
 
     footer{position:relative;z-index:10;text-align:center;color:var(--muted);font-size:.72rem;padding:10px 16px 18px}
 
-    /* Alto contraste (mejor práctica WCAG para tema oscuro): texto BLANCO puro sobre negro,
-       sin glass/blur/sombras. El borde va SOLO en los controles interactivos (contraste
-       no-textual >=3:1), NO en las tarjetas (evita el efecto "encajonado"). Foco muy visible. */
-    body.hc{background:#000 !important;color:#fff !important}
-    /* Contenedores: fondo sólido, SIN borde (la jerarquía la da el texto, no las cajas). */
+    /* Alto contraste — TEMA CLARO: fondo blanco, texto negro, bordes definidos.
+       Es el patrón de alto contraste más común y legible (blanco/negro, no oscuro). */
+    body.hc{background:#fff !important;color:#000 !important}
+    /* Contenedores: fondo blanco, sin glass/blur/sombra; borde negro fino para separar. */
     body.hc .glass,body.hc .card,body.hc .box,body.hc .chatwrap{
-      background:#000 !important;border-color:transparent !important;box-shadow:none !important;backdrop-filter:none !important}
-    /* Todo el texto a blanco puro (elimina grises de bajo contraste). */
-    body.hc .muted,body.hc .desc,body.hc small,body.hc p,body.hc .name,body.hc .about,body.hc b,body.hc h2,body.hc .lbl{color:#fff !important}
-    /* Controles interactivos: borde blanco visible (2px) para distinguirlos del fondo. */
+      background:#fff !important;border:1px solid #000 !important;box-shadow:none !important;backdrop-filter:none !important}
+    /* Todo el texto a negro (elimina grises de bajo contraste). */
+    body.hc,body.hc .muted,body.hc .desc,body.hc small,body.hc p,body.hc .name,body.hc .about,body.hc b,body.hc h2,body.hc .lbl,body.hc footer,body.hc .brand h1{color:#000 !important}
+    /* Controles interactivos: fondo blanco, borde negro 2px, texto negro. */
     body.hc #input,body.hc .fase,body.hc .qchip,body.hc .tbtn,body.hc .iconbtn,body.hc .subact,body.hc .mic,body.hc .destino{
-      background:#000 !important;border:2px solid #fff !important;color:#fff !important;box-shadow:none !important;backdrop-filter:none !important}
-    body.hc .bub{background:#000 !important;border:1px solid #fff !important;color:#fff !important}
-    body.hc .badge{background:#000 !important;color:#fff !important;border:1px solid #fff !important}
-    /* Enlaces: cian claro + subrayado (distinguibles sin depender solo del color). */
-    body.hc a,body.hc .wline a{color:#7cc7ff !important;text-decoration:underline !important}
+      background:#fff !important;border:2px solid #000 !important;color:#000 !important;box-shadow:none !important;backdrop-filter:none !important}
+    body.hc #input::placeholder{color:#444 !important}
+    body.hc .bub{background:#fff !important;border:1px solid #000 !important;color:#000 !important}
+    body.hc .badge{background:#fff !important;color:#000 !important;border:1px solid #000 !important}
+    /* Enlaces: azul clásico + subrayado (alto contraste sobre blanco). */
+    body.hc a,body.hc .wline a{color:#0000cc !important;text-decoration:underline !important}
     body.hc .orb,body.hc .mtns{display:none}
-    /* Estado activo / acciones primarias: relleno blanco con texto negro (resaltan claramente). */
+    /* Estado activo / acciones primarias: negro sólido con texto blanco (resaltan claramente). */
     body.hc .send,body.hc .fase.on,body.hc .tbtn[aria-pressed="true"],body.hc .dlpdf{
-      background:#fff !important;border:2px solid #fff !important;color:#000 !important;font-weight:800}
-    body.hc .fase.on b,body.hc .fase.on small{color:#000 !important}
+      background:#000 !important;border:2px solid #000 !important;color:#fff !important;font-weight:800}
+    body.hc .fase.on b,body.hc .fase.on small{color:#fff !important}
     /* Foco muy visible en cualquier elemento. */
-    body.hc *:focus-visible{outline:3px solid #fff !important;outline-offset:2px}
+    body.hc *:focus-visible{outline:3px solid #0000cc !important;outline-offset:2px}
 
     /* Lectura fácil */
     body.dys{letter-spacing:.06em;word-spacing:.16em;line-height:1.9}

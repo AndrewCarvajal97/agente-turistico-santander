@@ -69,9 +69,10 @@ evita que el modelo invente información fuera del documento.
    `json.loads` y responde qué temas consultan más los usuarios. Aplica pandas + LLM + JSON.
 5. **Análisis de imágenes (visión):** el usuario sube una foto (`POST /vision`, botón en el
    frontend); se codifica en base64 y se envía a **Gemini visión** (mensaje multimodal con
-   LangChain) para identificar lugares, platos o actividades de Santander. La cadena LCEL
-   usa `JsonOutputParser` + un modelo **Pydantic**, así que devuelve **JSON estructurado**
-   (`descripcion`, `etiquetas`, `relacion_santander`). La visión solo funciona con Gemini.
+   LangChain) para identificar lugares, platos o actividades de Santander. Usa la mejor
+   práctica de salida estructurada, `modelo.with_structured_output(ModeloPydantic)` (con un
+   campo `Literal` para el tipo), devolviendo un objeto validado
+   (`titulo`, `descripcion`, `etiquetas`, `tipo`, `relacion_santander`). Solo con Gemini.
 
 ### Estructura del repositorio
 

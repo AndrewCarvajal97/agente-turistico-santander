@@ -160,6 +160,7 @@ async def vision_endpoint(file: UploadFile = File(...), pregunta: str = Form("")
                 "quizá se alcanzó su límite). Intenta de nuevo en un rato. 🙏"
             ),
             "etiquetas": [],
+            "tipo": "otro",
             "relacion_santander": "",
         }
 

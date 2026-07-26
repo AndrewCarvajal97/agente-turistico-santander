@@ -197,7 +197,9 @@
         cargando.remove();
         if (r.ok) {
           let txt = '';
-          if (data.titulo) txt += '🖼️ ' + data.titulo + '\n\n';
+          if (data.titulo) txt += '🖼️ ' + data.titulo;
+          if (data.tipo && data.tipo !== 'otro') txt += ' (' + data.tipo + ')';
+          if (data.titulo) txt += '\n\n';
           txt += data.descripcion || '';
           if (data.relacion_santander && data.relacion_santander.toLowerCase() !== 'ninguna') {
             txt += '\n\n📍 Santander: ' + data.relacion_santander;

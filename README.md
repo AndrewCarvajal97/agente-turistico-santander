@@ -231,17 +231,26 @@ así que basta con definir la clave del proveedor en el `.env` del servidor. Pas
 
 ### 📸 Capturas de la aplicación (desplegada en OCI)
 
-La aplicación corriendo en la instancia OCI (nota la IP pública `149.130.177.89:8000`):
+La aplicación corriendo en la instancia OCI (IP pública `149.130.177.89:8000`), con las **tres
+fases** de respuesta, **descarga del PDF** y opciones de **accesibilidad**:
 
-![Interfaz del agente turístico de Santander](docs/app-interfaz.png)
+![Interfaz con las tres fases (Contexto completo, RAG y Guía + Web), el resumen de la fase activa y el botón de descarga del PDF](docs/Captura-fase1-inicial.png)
 
-**Fase "Contexto completo"** — responde con el documento completo e indica la fuente:
+**Fase "Contexto completo"** — inyecta el PDF completo y responde directo, citando la fuente:
 
-![Fase contexto completo respondiendo la capital de Santander](docs/app-contexto-completo.png)
+![Contexto completo respondiendo que la capital de Santander es Bucaramanga, con la fuente en PDF](docs/Captura-fase1-capital-respuesta.png)
 
-**Fase "RAG · base vectorial"** — recupera los fragmentos relevantes y muestra las **citaciones** (página + archivo):
+**Honestidad ante datos que no están en la guía** — no inventa eventos: lo aclara y **remite a la fase Guía + Web**:
 
-![Fase RAG con citaciones de la guía](docs/app-rag-citaciones.png)
+![Contexto completo: ante una pregunta por eventos, aclara que la guía no los incluye y sugiere la fase Guía + Web](docs/Captura-fase1-eventos-sin-respuesta.png)
+
+**Fase "RAG · base vectorial"** — busca por significado en la guía (embeddings de Cohere + FAISS) con citaciones trazables:
+
+![Fase RAG · base vectorial activa, con el resumen de su técnica y una respuesta del asistente](docs/Captura-fase2-quien-eres.png)
+
+**Fase "Guía + Web"** — combina la guía con **información ACTUAL de internet** (Tavily): trae eventos reales de Bucaramanga con **fuentes clicables**:
+
+![Fase Guía + Web mostrando eventos actuales de Bucaramanga (Global EduExpo, Feria Bonita 2026) con enlaces a las fuentes](docs/Captura-fase3-inicial-pregunta-web.png)
 
 ---
 

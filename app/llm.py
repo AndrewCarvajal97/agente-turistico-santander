@@ -50,13 +50,18 @@ def _rate_limiter_para(proveedor: str):
         if lim is None:
             from langchain_core.rate_limiters import InMemoryRateLimiter
 
+            bucket = max(2, rpm // 3)
             lim = InMemoryRateLimiter(
                 requests_per_second=rpm / 60.0,
                 check_every_n_seconds=0.1,
-                # Permite una pequeña ráfaga (p. ej. un turno del agente) y luego
-                # regula; mantenerlo bajo respeta el tope por minuto bajo carga.
-                max_bucket_size=max(1, rpm // 3),
+                # Permite una ráfaga (p. ej. un turno del agente o varias preguntas
+                # seguidas) y luego regula; mantenerlo bajo respeta el tope por minuto.
+                max_bucket_size=bucket,
             )
+            # Pre-carga el bucket: así la PRIMERA petición (app ociosa) sale al instante
+            # y no espera ~5s por el token. El límite por minuto se sigue respetando bajo
+            # carga sostenida. Sin esto, el streaming parecía "congelado" antes del 1er token.
+            lim.available_tokens = float(bucket)
             _rate_limiters[proveedor] = lim
     return lim
 
@@ -193,6 +198,11 @@ def _construir_modelo(proveedor: str, modelo: str, temperature: float = 0.2):
             temperature=temperature,
             max_output_tokens=settings.max_output_tokens,
             rate_limiter=limiter,
+            # Gemini 2.5 "piensa" antes de responder (~30s de latencia al primer token).
+            # Para un chat turístico no aporta y arruina el streaming: se desactiva.
+            thinking_budget=0,
+            # Failover rápido: si está sin cupo (429) no reintenta 30s, cae al siguiente.
+            max_retries=0,  # 429 = sin cupo: no reintentar, saltar YA al siguiente candidato
         )
     if proveedor == "cohere":
         from langchain_cohere import ChatCohere
@@ -202,6 +212,7 @@ def _construir_modelo(proveedor: str, modelo: str, temperature: float = 0.2):
             cohere_api_key=settings.cohere_api_key,
             temperature=temperature,
             rate_limiter=limiter,
+            max_retries=0,  # 429 = sin cupo: no reintentar, saltar YA al siguiente candidato
         )
     from langchain_groq import ChatGroq
 
@@ -211,6 +222,7 @@ def _construir_modelo(proveedor: str, modelo: str, temperature: float = 0.2):
         temperature=temperature,
         max_tokens=min(settings.max_output_tokens, 1024),
         rate_limiter=limiter,
+        max_retries=0,  # 429 = sin cupo: no reintentar, saltar YA al siguiente candidato
     )
 
 

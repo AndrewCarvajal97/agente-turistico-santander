@@ -66,7 +66,10 @@ SYSTEM_PROMPT_RAG = (
     "Responde exactamente 'No lo sé' SOLO cuando te pidan un dato ESPECÍFICO de Santander que "
     "no esté en el contexto y que no puedas cubrir ni con un consejo general útil ni con la "
     "aclaración anterior. Si se te proporciona el historial de la conversación, tenlo en "
-    "cuenta para entender preguntas de seguimiento ('eso', 'ahí', 'y entonces', 'para eso')."
+    "cuenta para entender preguntas de seguimiento ('eso', 'ahí', 'y entonces', 'para eso'). "
+    "IMPORTANTE: NO saludes ni te presentes en cada respuesta (nada de '¡Hola! Soy un guía "
+    "turístico...'). Ve DIRECTO a responder la pregunta. Solo preséntate, en UNA frase breve, "
+    "si te preguntan explícitamente quién eres. No repitas frases de una respuesta anterior."
 )
 
 # Multi-query (RAG avanzado): una LLM reescribe la pregunta en varias versiones para

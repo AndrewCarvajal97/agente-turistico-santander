@@ -11,7 +11,7 @@ Endpoints:
   POST /admin/analisis -> categoriza las preguntas (admin, requiere clave)
   POST /agente         -> agente orquestador ReAct (LangGraph, paralelo)
   POST /grafo/ask      -> agente con grafo de estados (triaje + RAG, paralelo)
-  POST /datos/analizar -> agente de análisis de datos sobre un CSV (admin, ejecuta código)
+  POST /datos/analizar -> analiza el historial de conversaciones del proyecto (admin)
   POST /reload         -> recarga el documento fuente
 """
 from __future__ import annotations
@@ -255,12 +255,16 @@ def rag_reindex(entrada: AdminIn) -> dict:
 
 @app.post("/datos/analizar")
 async def datos_analizar(
-    file: UploadFile = File(...),
     clave: str = Form(...),
     accion: str = Form("pregunta"),
     pregunta: str = Form(""),
+    file: UploadFile | None = File(None),
 ) -> dict:
-    """Agente de análisis de datos (curso): sube un CSV y analízalo.
+    """Agente de análisis de datos aplicado al PROYECTO: analiza el historial de
+    conversaciones del agente turístico (qué preguntan los usuarios, cuándo, etc.).
+
+    Por defecto usa `data/historial.csv` (datos reales del proyecto). Opcionalmente se
+    puede subir otro CSV en `file` para analizarlo.
 
     Acciones (herramientas personalizadas):
       - "explorar"     -> reporte de información general del DataFrame
@@ -276,9 +280,6 @@ async def datos_analizar(
         raise HTTPException(status_code=503, detail="No disponible: falta ADMIN_KEY.")
     if clave != settings.admin_key:
         raise HTTPException(status_code=401, detail="Clave de administrador incorrecta.")
-    contenido = await file.read()
-    if len(contenido) > _MAX_CSV:
-        raise HTTPException(status_code=413, detail="El CSV supera el tamaño máximo (2 MB).")
     try:
         import io
 
@@ -286,19 +287,38 @@ async def datos_analizar(
 
         from .datos import agente_datos
 
-        df = pd.read_csv(io.BytesIO(contenido))
+        # Fuente de datos: CSV subido (opcional) o el historial del proyecto (por defecto).
+        if file is not None and file.filename:
+            contenido = await file.read()
+            if len(contenido) > _MAX_CSV:
+                raise HTTPException(status_code=413, detail="El CSV supera el máximo (2 MB).")
+            df = pd.read_csv(io.BytesIO(contenido))
+            fuente = "csv_subido"
+        else:
+            df = memory.cargar_df()
+            fuente = "historial_conversaciones"
+
+        if df.empty:
+            raise HTTPException(
+                status_code=400,
+                detail="No hay datos para analizar (el historial está vacío o el CSV no tiene filas).",
+            )
+
+        base = {"fuente": fuente}
         if accion == "explorar":
-            return {"tipo": "explorar", "respuesta": agente_datos.reporte_general(df)}
+            return {**base, "tipo": "explorar", "respuesta": agente_datos.reporte_general(df)}
         if accion == "estadisticas":
-            return {"tipo": "estadisticas", "respuesta": agente_datos.reporte_estadistico(df)}
+            return {**base, "tipo": "estadisticas", "respuesta": agente_datos.reporte_estadistico(df)}
         if accion == "grafico":
-            return {"tipo": "grafico", **agente_datos.generar_grafico(df, pregunta)}
-        return {"tipo": "pregunta", **agente_datos.analizar(df, pregunta)}
+            return {**base, "tipo": "grafico", **agente_datos.generar_grafico(df, pregunta)}
+        return {**base, "tipo": "pregunta", **agente_datos.analizar(df, pregunta)}
+    except HTTPException:
+        raise
     except llm.SinCupoError:
         raise HTTPException(status_code=503, detail=MSG_SIN_CUPO)
     except Exception as exc:  # noqa: BLE001
         print(f"[datos] error -> {exc}")
-        raise HTTPException(status_code=400, detail=f"No se pudo analizar el CSV: {exc}")
+        raise HTTPException(status_code=400, detail=f"No se pudo analizar los datos: {exc}")
 
 
 @app.post("/agente")

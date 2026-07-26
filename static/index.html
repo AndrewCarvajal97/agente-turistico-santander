@@ -261,8 +261,8 @@
 
       <div class="fases" id="modos" role="tablist" aria-label="Fase de respuesta">
         <button class="fase on" data-modo="ask" role="tab" aria-selected="true">🧭 <span><b>Contexto completo</b><small>respuesta directa</small></span></button>
-        <button class="fase web" data-modo="web" role="tab" aria-selected="false">🌐 <span><b>Guía + Web</b><small>info actual con fuentes</small></span></button>
         <button class="fase rag" data-modo="rag" role="tab" aria-selected="false">🔎 <span><b>RAG · base vectorial</b><small>con citas de fuente</small></span></button>
+        <button class="fase web" data-modo="web" role="tab" aria-selected="false">🌐 <span><b>Guía + Web</b><small>info actual con fuentes</small></span></button>
       </div>
 
       <div id="msgs" role="log" aria-live="polite" aria-label="Conversación con Santy">
@@ -320,12 +320,7 @@
       modo=b.dataset.modo;
       document.querySelectorAll('.fase').forEach(x=>{const on=x===b;x.classList.toggle('on',on);x.setAttribute('aria-selected',on);});
       box.innerHTML='';
-      const intro={
-        rag:'Fase 🔎 RAG · base vectorial activa. Respondo desde la guía y muestro las citas de fuente.',
-        web:'Fase 🌐 Guía + Web activa. Combino la guía con información ACTUAL de internet (eventos, clima, precios) y cito las fuentes.',
-        ask:'Fase 🧭 Contexto completo activa. Respondo usando el documento completo como contexto.'
-      };
-      msgBot(intro[modo]||intro.ask);
+      introFase(modo);
       input.focus();
     });
 
@@ -344,6 +339,27 @@
       const s=document.createElement('span');s.textContent=t;bub.appendChild(s);
       if(fuente){const f=document.createElement('div');f.className='src';f.textContent='📄 Fuente: '+fuente;bub.appendChild(f);}
       nombre(wrap,'Santy · Guía IA');box.scrollTop=box.scrollHeight;}
+    /* Resumen de cada fase (qué hace + la técnica que implementa) al cambiar */
+    const FASE_INFO={
+      ask:{t:'🧭 Contexto completo',
+        d:'Inyecto la guía completa (PDF) como contexto y te respondo directo, en streaming (token a token). Ideal para preguntas generales de Santander.',
+        tec:'Técnica: prompt con el documento entero · LangChain + respuesta en streaming (SSE).'},
+      rag:{t:'🔎 RAG · base vectorial',
+        d:'Busco en la guía por SIGNIFICADO: la parto en fragmentos, los convierto en vectores y recupero solo los más relevantes; respondo con eso y cito las páginas exactas.',
+        tec:'Técnica: embeddings Cohere + base vectorial FAISS + citas trazables con filtro de relevancia.'},
+      web:{t:'🌐 Guía + Web',
+        d:'Combino la guía (lo estático) con información ACTUAL de internet: eventos, ferias, clima y precios de hoy, siempre citando las fuentes.',
+        tec:'Técnica: grafo LangGraph (router → guía / web / ambas → supervisor) + búsqueda web Tavily.'}
+    };
+    function introFase(modo){const{bub,wrap}=fila('bot');
+      const info=FASE_INFO[modo]||FASE_INFO.ask;
+      const t=document.createElement('div');t.style.fontWeight='800';t.style.marginBottom='4px';
+      t.textContent='Fase '+info.t+' activa';bub.appendChild(t);
+      const d=document.createElement('div');d.textContent=info.d;bub.appendChild(d);
+      const tec=document.createElement('div');tec.style.fontSize='.72rem';tec.style.color='var(--muted)';
+      tec.style.marginTop='6px';tec.textContent=info.tec;bub.appendChild(tec);
+      nombre(wrap,'Santy · Guía IA');box.scrollTop=box.scrollHeight;}
+
     function msgRag(d){const{bub,wrap}=fila('bot');
       const b=document.createElement('span');b.className='badge rag';b.textContent='🔎 RAG · base vectorial';
       bub.appendChild(b);bub.appendChild(document.createElement('br'));

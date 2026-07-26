@@ -93,6 +93,32 @@ Con base en estos datos, elabora en español un resumen explicativo con lenguaje
 5. Recomendaciones de próximos pasos en el análisis según los patrones identificados
 """
 
+PROMPT_VISUAL = """Eres un especialista en visualización de datos. Tu tarea es generar ÚNICAMENTE el código Python para graficar con base en la solicitud del usuario.
+
+## Solicitud del usuario:
+"{pregunta}"
+
+## Metadatos del DataFrame (ya existe como `df`):
+{columnas}
+
+## Muestra de los datos (3 primeras filas):
+{muestra}
+
+## Instrucciones obligatorias:
+1. Usa `matplotlib.pyplot` (como `plt`) y `seaborn` (como `sns`); ya están importados.
+2. Define el tema con `sns.set_theme()`.
+3. Usa solo columnas que existan en el DataFrame `df`. NUNCA recrees `df`.
+4. Elige el tipo de gráfico adecuado: histplot/kdeplot/boxplot/violinplot (distribución numérica),
+   countplot (categórica), barplot (comparación entre categorías), scatterplot (relación), lineplot (series).
+5. Configura el tamaño con `figsize=(8, 4)`.
+6. Añade título y etiquetas de ejes apropiadas.
+7. Posiciona el título a la izquierda con `loc='left'`, `pad=20`, `fontsize=14`.
+8. Mantén los ticks del eje X sin rotación con `plt.xticks(rotation=0)`.
+9. Elimina los bordes superior y derecho con `sns.despine()`.
+10. Finaliza con `plt.show()`.
+
+Devuelve ÚNICAMENTE el código Python separando cada instrucción con ';', sin texto adicional."""
+
 # Proveedores en orden de preferencia para tool-calling (Groq tiene el mejor soporte).
 _CANDIDATOS_TOOLS = ("groq", "gemini", "cohere")
 
@@ -221,6 +247,58 @@ class AgenteDatos:
             return "El dataset no tiene columnas numéricas para un resumen estadístico."
         resumen = numericas.describe().to_string()
         return self._redactar(PROMPT_ESTADISTICA.format(resumen=resumen))
+
+    def generar_grafico(self, df, pregunta: str) -> dict:
+        """Herramienta visual: el LLM genera código matplotlib/seaborn y se ejecuta.
+
+        Returns: {"codigo": str, "imagen_base64": str} (PNG). Ejecuta código de graficado
+        generado por el LLM: el endpoint está protegido con ADMIN_KEY.
+        """
+        import base64
+        import io
+
+        import matplotlib
+
+        matplotlib.use("Agg")  # backend sin ventana (servidor)
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+
+        pregunta = (pregunta or "").strip()
+        if not pregunta:
+            return {"codigo": "", "imagen_base64": "", "error": "Escribe qué gráfico quieres."}
+
+        columnas = ", ".join(f"{c} ({df[c].dtype})" for c in df.columns)
+        instruccion = PROMPT_VISUAL.format(
+            pregunta=pregunta, columnas=columnas, muestra=df.head(3).to_string()
+        )
+        # Genera el código como texto (con respaldo de proveedores) y lo sanea.
+        from langchain_core.output_parsers import StrOutputParser
+        from langchain_core.prompts import ChatPromptTemplate
+
+        prompt = ChatPromptTemplate.from_messages([("human", "{contenido}")])
+        codigo_bruto = (
+            prompt | llm.construir_chat_model(temperature=0) | StrOutputParser()
+        ).invoke({"contenido": instruccion})
+        codigo = _sanear_codigo(_limpiar_codigo(codigo_bruto))
+        if not codigo:
+            return {"codigo": "", "imagen_base64": "", "error": "No pude generar el gráfico."}
+
+        # Ejecuta el código de graficado y captura la figura como PNG en base64.
+        import pandas as pd
+
+        plt.close("all")
+        entorno = {"df": df, "plt": plt, "sns": sns, "pd": pd}
+        try:
+            exec(codigo, entorno)  # noqa: S102 - código de graficado; endpoint gated
+            figura = plt.gcf()
+            buffer = io.BytesIO()
+            figura.savefig(buffer, format="png", bbox_inches="tight", dpi=100)
+            imagen = base64.b64encode(buffer.getvalue()).decode()
+            return {"codigo": codigo, "imagen_base64": imagen}
+        except Exception as exc:  # noqa: BLE001
+            return {"codigo": codigo, "imagen_base64": "", "error": f"Error al graficar: {exc}"}
+        finally:
+            plt.close("all")
 
     def analizar(self, df, pregunta: str) -> dict:
         """Returns: {"codigo": str, "resultado": str, "respuesta": str}."""

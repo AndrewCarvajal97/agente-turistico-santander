@@ -265,6 +265,7 @@ async def datos_analizar(
     Acciones (herramientas personalizadas):
       - "explorar"     -> reporte de información general del DataFrame
       - "estadisticas" -> informe de estadísticas descriptivas
+      - "grafico"      -> genera un gráfico (matplotlib/seaborn) y lo devuelve en base64
       - "pregunta"     -> el LLM genera código pandas, la herramienta REPL lo EJECUTA
                           sobre el DataFrame y responde en lenguaje natural (usa `pregunta`)
 
@@ -290,6 +291,8 @@ async def datos_analizar(
             return {"tipo": "explorar", "respuesta": agente_datos.reporte_general(df)}
         if accion == "estadisticas":
             return {"tipo": "estadisticas", "respuesta": agente_datos.reporte_estadistico(df)}
+        if accion == "grafico":
+            return {"tipo": "grafico", **agente_datos.generar_grafico(df, pregunta)}
         return {"tipo": "pregunta", **agente_datos.analizar(df, pregunta)}
     except llm.SinCupoError:
         raise HTTPException(status_code=503, detail=MSG_SIN_CUPO)

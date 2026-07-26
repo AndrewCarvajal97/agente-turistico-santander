@@ -14,5 +14,7 @@ langchain-pinecone==0.2.13
 pinecone==7.3.0
 pypdf==5.1.0
 pandas==2.2.3
+matplotlib==3.11.1
+seaborn==0.13.2
 python-dotenv==1.0.1
 python-multipart==0.0.20

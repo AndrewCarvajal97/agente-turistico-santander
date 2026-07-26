@@ -11,6 +11,7 @@ Este orquestador es **paralelo** a los endpoints existentes: se expone en
 from __future__ import annotations
 
 from . import llm
+from .config import settings
 from .tools import HERRAMIENTAS
 
 SYSTEM_ORQUESTADOR = (
@@ -40,12 +41,38 @@ def _get_agente():
 
 
 def responder(pregunta: str) -> dict:
-    """Ejecuta el agente orquestador y devuelve la respuesta + herramientas usadas."""
+    """Ejecuta el agente orquestador y devuelve la respuesta + herramientas usadas.
+
+    Aplica un **tope de pasos** (`recursion_limit`, equivale al max_iterations del ReAct
+    manual del curso): si el agente razona en bucle, se corta con elegancia en vez de
+    seguir gastando cuota del LLM.
+    """
+    from langgraph.errors import GraphRecursionError
+
     agente = _get_agente()
-    resultado = agente.invoke({"messages": [("user", pregunta)]})
+    try:
+        resultado = agente.invoke(
+            {"messages": [("user", pregunta)]},
+            config={"recursion_limit": settings.agente_max_pasos},
+        )
+    except GraphRecursionError:
+        return {
+            "respuesta": (
+                "La consulta requería demasiados pasos y detuve el razonamiento para no "
+                "gastar de más. ¿Puedes reformularla de forma más concreta?"
+            ),
+            "herramientas_usadas": [],
+        }
     mensajes = resultado.get("messages", [])
 
     respuesta = mensajes[-1].content if mensajes else ""
+    # LangGraph, al alcanzar el tope, a veces devuelve un mensaje centinela en vez de lanzar
+    # la excepción; lo traducimos a un mensaje amable en español.
+    if not respuesta.strip() or "need more steps" in respuesta.lower():
+        respuesta = (
+            "La consulta requería demasiados pasos y detuve el razonamiento para no gastar "
+            "de más. ¿Puedes reformularla de forma más concreta?"
+        )
     # Registra qué herramientas usó el agente (para mostrar su razonamiento).
     herramientas_usadas = [
         getattr(m, "name", "") for m in mensajes if getattr(m, "type", "") == "tool"

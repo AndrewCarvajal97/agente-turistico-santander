@@ -86,6 +86,9 @@ class Settings:
 
     # Tavily: búsqueda web para el agente orquestador (info actual que no está en el PDF).
     tavily_api_key: str = _get("TAVILY_API_KEY")
+    # Tope de pasos del orquestador ReAct (equivale al max_iterations del curso): evita que
+    # el agente razone en bucle y gaste cuota de más. Cada ~2 pasos = 1 uso de herramienta.
+    agente_max_pasos: int = int(_get("AGENTE_MAX_PASOS", "12") or 12)
 
     # LangSmith (observabilidad): LangChain lo activa por sí solo leyendo LANGSMITH_*
     # de las variables de entorno (cargadas por load_dotenv). Esto es solo para reportar

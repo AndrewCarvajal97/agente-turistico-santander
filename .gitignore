@@ -12,7 +12,8 @@ __pycache__/
 # Memoria de conversaciones (datos generados en runtime)
 data/historial.csv
 
-# Índice vectorial (por si se agrega RAG con embeddings)
+# Índice vectorial FAISS persistido (se regenera desde los PDFs)
+data/faiss_index/
 data/index.npz
 data/*.index
 

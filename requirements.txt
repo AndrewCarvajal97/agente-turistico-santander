@@ -10,6 +10,8 @@ langchain-community==0.4.2
 langchain-text-splitters==1.1.2
 langchain-experimental==0.4.2
 faiss-cpu==1.14.3
+langchain-pinecone==0.2.13
+pinecone==7.3.0
 pypdf==5.1.0
 pandas==2.2.3
 python-dotenv==1.0.1

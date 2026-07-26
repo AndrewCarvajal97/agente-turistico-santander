@@ -4,7 +4,8 @@ Endpoints:
   GET  /               -> interfaz web mínima (chat)
   GET  /health         -> estado del servicio
   POST /ask            -> responde una pregunta (contexto completo + memoria)
-  POST /rag/ask        -> responde con RAG (embeddings + FAISS, vía paralela)
+  POST /rag/ask        -> responde con RAG (embeddings + base vectorial, vía paralela)
+  POST /rag/reindex    -> reconstruye la base vectorial del RAG (admin, requiere clave)
   POST /vision         -> analiza una imagen (Gemini visión)
   GET  /history        -> lista/busca las conversaciones guardadas
   POST /admin/analisis -> categoriza las preguntas (admin, requiere clave)
@@ -218,6 +219,28 @@ def rag_ask(entrada: PreguntaIn) -> dict:
             status_code=503,
             detail="El RAG no está disponible ahora (falta COHERE_API_KEY o límite de cuota).",
         )
+
+
+@app.post("/rag/reindex")
+def rag_reindex(entrada: AdminIn) -> dict:
+    """Reconstruye la base vectorial del RAG (admin). Úsalo al agregar/quitar PDFs.
+
+    Con persistencia, el índice se reutiliza entre arranques; este endpoint fuerza
+    su recálculo (``forzar=True``) para que tome los documentos actuales.
+    """
+    if not settings.admin_key:
+        raise HTTPException(status_code=503, detail="Reindex no disponible: falta ADMIN_KEY.")
+    if entrada.clave != settings.admin_key:
+        raise HTTPException(status_code=401, detail="Clave de administrador incorrecta.")
+    try:
+        from .rag import rag
+
+        n = rag.indexar(forzar=True)
+        return {"status": "ok", "fragmentos_indexados": n, "backend": settings.rag_vectorstore}
+    except llm.SinCupoError:
+        raise HTTPException(status_code=503, detail=MSG_SIN_CUPO)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"Error al reindexar: {exc}")
 
 
 @app.post("/agente")

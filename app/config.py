@@ -44,9 +44,13 @@ class Settings:
     # Modelo de embeddings de Cohere (para el RAG real).
     cohere_embed_model: str = _get("COHERE_EMBED_MODEL", "embed-multilingual-v3.0")
 
-    # --- RAG (recuperación por embeddings + FAISS), vía paralela a /ask ---
+    # --- RAG (recuperación por embeddings + base vectorial), vía paralela a /ask ---
     # Directorio con los documentos (PDF) que indexa el RAG (multi-documento).
     rag_docs_dir: str = _get("RAG_DOCS_DIR", "data")
+    # Backend de base vectorial (strategy): "faiss" (local/persistido) o "pinecone" (nube).
+    rag_vectorstore: str = _get("RAG_VECTORSTORE", "faiss")
+    # Carpeta donde se PERSISTE el índice FAISS (para no re-indexar en cada arranque).
+    rag_index_dir: str = _get("RAG_INDEX_DIR", "data/faiss_index")
     # Proveedor de embeddings: "cohere" (gratis en el trial) o "gemini".
     rag_embed_provider: str = _get("RAG_EMBED_PROVIDER", "cohere")
     # Estrategia de chunking: "recursive" (por caracteres) o "semantic" (por significado).
@@ -56,6 +60,12 @@ class Settings:
     rag_top_k: int = int(_get("RAG_TOP_K", "4") or 4)
     # Umbral mínimo de similitud (0-1) para considerar un fragmento relevante.
     rag_score_threshold: float = float(_get("RAG_SCORE_THRESHOLD", "0.3") or 0.3)
+
+    # --- Pinecone (base vectorial en la nube, RAG_VECTORSTORE=pinecone) ---
+    pinecone_api_key: str = _get("PINECONE_API_KEY")
+    pinecone_index: str = _get("PINECONE_INDEX", "santander-rag")
+    pinecone_cloud: str = _get("PINECONE_CLOUD", "aws")
+    pinecone_region: str = _get("PINECONE_REGION", "us-east-1")
 
     # Documento fuente
     pdf_path: str = _get("PDF_PATH", "data/guia_turistica_santander.pdf")

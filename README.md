@@ -85,7 +85,7 @@ alura-latam/
 │   ├── memory.py        # Memoria de conversaciones en CSV (pandas + filtros)
 │   ├── analytics.py     # Análisis de conversaciones (pandas + LLM + JSON)
 │   ├── vision.py        # Análisis de imágenes con Gemini visión (multimodal)
-│   ├── rag.py           # RAG real (chunks + embeddings Cohere + FAISS) — /rag/ask
+│   ├── rag.py           # RAG real (chunks + embeddings + FAISS/Pinecone) — /rag/ask
 │   ├── llm.py           # Capa LLM con LangChain (Gemini/Groq/Cohere + fallback)
 │   ├── tools.py         # Herramientas del agente orquestador (LangChain Tools)
 │   ├── orchestrator.py  # Agente ReAct con LangGraph (endpoint /agente, paralelo)
@@ -115,7 +115,7 @@ alura-latam/
 | Orquestación LLM | **LangChain** (chat models + prompts + LCEL + fallback) |
 | IA / LLM         | **Gemini**, **Groq** (Llama/Gemma) o **Cohere** — conmutable, con respaldo |
 | Lectura de PDF   | pypdf                                         |
-| RAG / vectores   | FAISS + embeddings de Cohere (`RecursiveCharacterTextSplitter`) |
+| RAG / vectores   | **FAISS** (persistido) o **Pinecone** (nube) + embeddings de Cohere |
 | Memoria / datos  | pandas (CSV de sesiones, filtros)             |
 | Nube / Deploy    | Oracle Cloud Infrastructure (OCI Compute)     |
 | Frontend         | HTML + CSS + JavaScript (vanilla)             |
@@ -260,14 +260,14 @@ datos), y cada herramienta puede usar el LLM que mejor le sirva.
 > Es una vía **paralela** que no altera los endpoints principales. Consume más tokens (razona
 > + actúa en varios pasos), por lo que está pensada para demostración y crecimiento futuro.
 
-## 🔎 RAG real (embeddings + FAISS) — vía paralela
+## 🔎 RAG real (embeddings + base vectorial) — vía paralela
 
 Además del enfoque de **contexto completo** de `/ask`, el proyecto incluye un **RAG clásico**
 en `POST /rag/ask` ([rag.py](app/rag.py)): se cargan **todos los PDFs** de una carpeta con
 `DirectoryLoader` (multi-documento, escalable), se dividen en *chunks* (configurable:
 `RecursiveCharacterTextSplitter` por caracteres, o **`SemanticChunker`** por significado),
 cada chunk se convierte en un **vector semántico** con
-**embeddings de Cohere** (o Gemini, configurable), y se indexa en **FAISS**. La recuperación
+**embeddings de Cohere** (o Gemini, configurable), y se indexa en una **base vectorial**. La recuperación
 usa un *retriever* con **umbral de similitud** (`similarity_score_threshold`): por cada
 pregunta se traen solo los chunks realmente relevantes y esos se pasan al LLM (con una cadena
 *stuff* en LCEL: `prompt | modelo | StrOutputParser`) para **generar** la respuesta. La
@@ -276,6 +276,18 @@ es trazable (fragmento + **página** + archivo, vía `PyPDFLoader` + `split_docu
 el umbral —o si el modelo no halla la respuesta en el contexto— devuelve **"No lo sé"** con
 `documentos_encontrados: false` (evita alucinar). Es la técnica adecuada para escalar a
 documentos grandes o múltiples fuentes (requiere `COHERE_API_KEY`).
+
+### 🗄️ Base vectorial intercambiable (patrón *strategy*)
+
+El backend de la base vectorial se elige con `RAG_VECTORSTORE`, sin tocar el resto del pipeline:
+
+| Backend | `RAG_VECTORSTORE` | Descripción |
+|---|---|---|
+| **FAISS** (por defecto) | `faiss` | Local y **persistido en disco** (`data/faiss_index/`): si el índice existe se **carga** en vez de recalcular los embeddings, así no se reindexa —ni se gasta cuota— en cada arranque. |
+| **Pinecone** | `pinecone` | Base vectorial **en la nube** (serverless): los vectores persisten fuera del servidor y escalan a muchos documentos. Crea el índice automáticamente con la dimensión correcta (Cohere `embed-multilingual-v3.0` = 1024). Requiere `PINECONE_API_KEY`. |
+
+Al **agregar o quitar PDFs**, `POST /rag/reindex` (protegido con `ADMIN_KEY`) reconstruye el
+índice (`forzar=True`) para que tome los documentos actuales.
 
 ## 🕸️ Agente con grafo de estados (LangGraph) — vía paralela
 
@@ -305,7 +317,6 @@ El endpoint `GET /grafo/diagrama` devuelve el grafo en Mermaid. Validado en vivo
 ## 🗺️ Roadmap / próximos pasos
 
 - Sumar herramientas al orquestador (p. ej. consulta a una base de datos).
-- Persistir el índice FAISS en disco para no reindexar en cada arranque.
 
 ---
 

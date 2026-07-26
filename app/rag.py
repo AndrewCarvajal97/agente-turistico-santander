@@ -25,9 +25,16 @@ from . import llm
 from .config import settings
 
 # Palabras demasiado comunes en la guía para medir si un fragmento fue realmente usado.
+# Se excluyen del solape porque aparecen en casi todos los chunks (o son relleno) y
+# provocaban CITAS IRRELEVANTES: p. ej. una respuesta sobre "fiestas" citaba el chunk del
+# aeropuerto solo por compartir "Bucaramanga"/"cultura"/"gastronomia".
 _PALABRAS_COMUNES = {
     "santander", "colombia", "departamento", "lugares", "informacion", "tambien",
     "puedes", "sobre", "donde", "cuando", "estas", "estos", "entre", "principales",
+    "bucaramanga", "turistico", "turistica", "turismo", "ciudad", "ciudades", "region",
+    "viaje", "viajar", "visitar", "cultura", "cultural", "gastronomia", "tradicion",
+    "actividades", "importante", "recomiendo", "ademas", "mejor", "puede", "tener",
+    "cuenta", "opciones", "disfrutar", "ofrece", "encuentra",
 }
 
 
@@ -41,11 +48,16 @@ SYSTEM_PROMPT_RAG = (
     "gastronomía, rutas) básate en el contexto proporcionado. Puedes complementar con "
     "consejos prácticos de viaje y sentido común (p. ej. qué calzado usar para caminar, cómo "
     "prepararse para acampar o hacer senderismo) aunque no estén textualmente en el contexto. "
-    "No inventes datos específicos (precios, horarios, lugares concretos) que no estén en el "
-    "contexto. Responde exactamente 'No lo sé' SOLO cuando te pidan un dato ESPECÍFICO de "
-    "Santander que no esté en el contexto y que no puedas cubrir con un consejo general útil. "
-    "Si se te proporciona el historial de la conversación, tenlo en cuenta para entender "
-    "preguntas de seguimiento (referencias como 'eso', 'ahí', 'y entonces', 'para eso')."
+    "REGLA CLAVE: NUNCA inventes datos específicos que no estén en el contexto: precios, "
+    "horarios, lugares concretos, y en especial EVENTOS, FERIAS, FIESTAS, FESTIVALES, "
+    "CONCIERTOS o FECHAS. La guía NO incluye una agenda de eventos actuales. Si te preguntan "
+    "por eventos/ferias/fiestas/fechas y NO están en el contexto, NO los inventes: aclara con "
+    "honestidad que la guía no incluye agenda de eventos y sugiere usar la fase '🌐 Guía + "
+    "Web' del asistente, que consulta información actual en internet. "
+    "Responde exactamente 'No lo sé' SOLO cuando te pidan un dato ESPECÍFICO de Santander que "
+    "no esté en el contexto y que no puedas cubrir ni con un consejo general útil ni con la "
+    "aclaración anterior. Si se te proporciona el historial de la conversación, tenlo en "
+    "cuenta para entender preguntas de seguimiento ('eso', 'ahí', 'y entonces', 'para eso')."
 )
 
 # Multi-query (RAG avanzado): una LLM reescribe la pregunta en varias versiones para

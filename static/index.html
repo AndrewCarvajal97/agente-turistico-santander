@@ -105,7 +105,9 @@
     .fase small{font-size:.66rem;display:block;color:var(--muted)}
     .fase.on{border-color:transparent;background:linear-gradient(135deg,var(--green-d),var(--green))}
     .fase.on.rag{background:linear-gradient(135deg,var(--red-d),var(--red))}
+    .fase.on.web{background:linear-gradient(135deg,#e6b800,var(--yellow))}
     .fase.on b,.fase.on small{color:#fff}
+    .fase.on.web b,.fase.on.web small{color:#241a00}
 
     #msgs{flex:1;padding:18px 16px;overflow-y:auto;display:flex;flex-direction:column;gap:14px;min-height:300px;max-height:52vh}
     .m{display:flex;gap:10px;align-items:flex-start}
@@ -121,6 +123,11 @@
            text-transform:uppercase;padding:3px 9px;border-radius:20px;margin-bottom:7px}
     .badge.ctx{background:rgba(0,135,81,.2);color:#7ee0b4}
     .badge.rag{background:rgba(227,28,35,.2);color:#ff9ba0}
+    .badge.web{background:rgba(255,199,44,.2);color:var(--yellow)}
+    .badge .ruta{font-weight:600;opacity:.85;letter-spacing:0}
+    .wsec{font-weight:800;margin:11px 0 4px;color:var(--ink)}
+    .wline{margin:3px 0}
+    .wline a{color:var(--yellow);word-break:break-all}
     .src{font-size:.7rem;color:var(--muted);margin-top:8px}
     details.citas{margin-top:9px}
     details.citas summary{cursor:pointer;color:var(--yellow);font-weight:700;font-size:.74rem;list-style:none}
@@ -233,7 +240,7 @@
       </div>
       <div class="box glass">
         <div style="font-size:.66rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--yellow);margin-bottom:8px">Sobre este asistente</div>
-        <p class="about">Guía turística con <b>IA</b> del <b>Challenge Alura Agente</b>. Responde desde una <b>guía en PDF</b> usando <b>LangChain</b> (Gemini/Groq/Cohere). Elige la fase <b>Contexto completo</b> o <b>RAG</b> (con citas), identifica lugares <b>por foto</b> y es <b>accesible</b> (voz, contraste, lectura fácil).</p>
+        <p class="about">Guía turística con <b>IA</b> del <b>Challenge Alura Agente</b>. Responde desde una <b>guía en PDF</b> usando <b>LangChain</b> (Gemini/Groq/Cohere). Elige la fase <b>Contexto completo</b>, <b>Guía + Web</b> (info actual de internet) o <b>RAG</b> (con citas), identifica lugares <b>por foto</b> y es <b>accesible</b> (voz, contraste, lectura fácil).</p>
       </div>
     </aside>
 
@@ -254,6 +261,7 @@
 
       <div class="fases" id="modos" role="tablist" aria-label="Fase de respuesta">
         <button class="fase on" data-modo="ask" role="tab" aria-selected="true">🧭 <span><b>Contexto completo</b><small>respuesta directa</small></span></button>
+        <button class="fase web" data-modo="web" role="tab" aria-selected="false">🌐 <span><b>Guía + Web</b><small>info actual con fuentes</small></span></button>
         <button class="fase rag" data-modo="rag" role="tab" aria-selected="false">🔎 <span><b>RAG · base vectorial</b><small>con citas de fuente</small></span></button>
       </div>
 
@@ -312,9 +320,12 @@
       modo=b.dataset.modo;
       document.querySelectorAll('.fase').forEach(x=>{const on=x===b;x.classList.toggle('on',on);x.setAttribute('aria-selected',on);});
       box.innerHTML='';
-      msgBot(modo==='rag'
-        ? 'Fase 🔎 RAG · base vectorial activa. Respondo desde la guía y muestro las citas de fuente.'
-        : 'Fase 🧭 Contexto completo activa. Respondo usando el documento completo como contexto.');
+      const intro={
+        rag:'Fase 🔎 RAG · base vectorial activa. Respondo desde la guía y muestro las citas de fuente.',
+        web:'Fase 🌐 Guía + Web activa. Combino la guía con información ACTUAL de internet (eventos, clima, precios) y cito las fuentes.',
+        ask:'Fase 🧭 Contexto completo activa. Respondo usando el documento completo como contexto.'
+      };
+      msgBot(intro[modo]||intro.ask);
       input.focus();
     });
 
@@ -361,9 +372,42 @@
         const mt=document.createElement('div');mt.className='cmeta';mt.textContent='📄 '+c.fuente+' · pág. '+c.pagina;
         cd.appendChild(mt);det.appendChild(cd);});bub.appendChild(det);}
 
+    /* Render seguro (markdown-lite) para el modo web: secciones ###, saltos y enlaces */
+    function renderRico(bub,texto){
+      const linkify=(linea,padre)=>{const re=/(https?:\/\/[^\s)]+)/g;let last=0,m;
+        while((m=re.exec(linea))){ if(m.index>last)padre.appendChild(document.createTextNode(linea.slice(last,m.index)));
+          const a=document.createElement('a');a.href=m[1];a.textContent=m[1];a.target='_blank';a.rel='noopener noreferrer';padre.appendChild(a);
+          last=m.index+m[1].length; }
+        if(last<linea.length)padre.appendChild(document.createTextNode(linea.slice(last)));};
+      (texto||'').split('\n').forEach(linea=>{const t=linea.trim();
+        if(!t){bub.appendChild(document.createElement('br'));return;}
+        if(t.startsWith('### ')){const h=document.createElement('div');h.className='wsec';h.textContent=t.slice(4);bub.appendChild(h);return;}
+        const p=document.createElement('div');p.className='wline';linkify(t.replace(/\*\*/g,''),p);bub.appendChild(p);});
+    }
+    function msgWeb(d){const{bub,wrap}=fila('bot');
+      const b=document.createElement('span');b.className='badge web';b.textContent='🌐 Guía + Web';
+      if(d.ruta){const r=document.createElement('span');r.className='ruta';r.textContent=' · '+d.ruta;b.appendChild(r);}
+      bub.appendChild(b);bub.appendChild(document.createElement('br'));
+      renderRico(bub,d.respuesta);
+      nombre(wrap,'Santy · Guía IA');box.scrollTop=box.scrollHeight;}
+
+    /* Modo web: consulta el grafo combinado (guía + Tavily). No es streaming. */
+    async function preguntarWeb(t){
+      const load=cargando();
+      try{
+        const r=await fetch('/grafo/combinado',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({pregunta:t,session_id:SESSION_ID})});
+        load.remove();
+        if(!r.ok){const d=await r.json().catch(()=>({}));msgBot('⚠️ '+(d.detail||'Error en el servidor.'));return;}
+        const d=await r.json(); msgWeb(d);
+        lastReply=d.respuesta||''; if(ttsOn) speak(lastReply);
+      }catch(e){if(load&&load.parentNode)load.remove();msgBot('⚠️ No se pudo conectar con el servidor.');}
+    }
+
     /* Envío al agente real — STREAMING (SSE): la respuesta aparece token a token */
     async function preguntar(t){
       msgUser(t); input.value=''; send.disabled=true;
+      if(modo==='web'){ try{await preguntarWeb(t);} finally{send.disabled=false;input.focus();} return; }
       const load=cargando(); const fase=modo==='rag'?'rag':'ctx';
       let bot=null, acum='', fin=null;
       const quitarCarga=()=>{if(load&&load.parentNode)load.remove();};

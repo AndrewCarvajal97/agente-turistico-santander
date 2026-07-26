@@ -147,25 +147,39 @@ def busca_web(consulta: str) -> str:
             from langchain_tavily import TavilySearch
 
             buscador = TavilySearch(
-                max_results=3, tavily_api_key=settings.tavily_api_key, topic="general"
+                max_results=4,
+                tavily_api_key=settings.tavily_api_key,
+                topic="general",
+                include_answer=True,      # respuesta ya sintetizada por Tavily (mucho mejor
+                                          # que los resultados crudos, que traían ruido).
+                search_depth="advanced",  # resultados más relevantes (mejor para eventos/precios).
             )
-            # Enfoca la búsqueda en el proyecto e incluye la FECHA ACTUAL para que las
-            # consultas de "hoy"/"este fin de semana" traigan info reciente (no desactualizada).
-            # Se calcula en cada llamada, así nunca queda vieja aunque el server lleve días arriba.
+            # Consulta enfocada: se quitan signos (¿? confundían al buscador, que devolvía la
+            # definición de "que") y se añade contexto geográfico + la FECHA ACTUAL, calculada
+            # en cada llamada, para traer info reciente sin quedar desactualizada.
             fecha_hoy = date.today().strftime("%d/%m/%Y")
+            limpia = consulta.strip().strip("¿?").strip()
             datos = buscador.invoke(
-                {"query": f"{consulta} en Santander, Colombia (información al {fecha_hoy})"}
+                {"query": f"{limpia} — Santander, Colombia (información al {fecha_hoy})"}
             )
-            resultados = datos.get("results", []) if isinstance(datos, dict) else (datos or [])
-            if not resultados:
-                return "No encontré resultados web para esa consulta."
-            lineas = []
+            if not isinstance(datos, dict):
+                datos = {"results": datos or []}
+            respuesta = (datos.get("answer") or "").strip()
+            resultados = datos.get("results", []) or []
+            partes = []
+            if respuesta:
+                partes.append(respuesta)
+            fuentes = []
             for r in resultados[:3]:
                 titulo = (r.get("title") or "").strip()
                 url = (r.get("url") or "").strip()
-                resumen = (r.get("content") or "").strip()[:220]
-                lineas.append(f"- {titulo}\n  {resumen}\n  Fuente: {url}")
-            return "\n".join(lineas)
+                if url:
+                    fuentes.append(f"- {titulo}: {url}" if titulo else f"- {url}")
+            if fuentes:
+                partes.append("Fuentes:\n" + "\n".join(fuentes))
+            if not partes:
+                return "No encontré resultados web para esa consulta."
+            return "\n\n".join(partes)
         except Exception as exc:  # noqa: BLE001 - la búsqueda web no debe tumbar al agente
             return f"No pude completar la búsqueda web en este momento ({exc})."
 

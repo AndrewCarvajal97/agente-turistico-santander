@@ -19,9 +19,21 @@ Es una vía PARALELA: se expone en ``/grafo/combinado`` sin alterar los demás e
 """
 from __future__ import annotations
 
+import re
 from typing import Literal, TypedDict
 
 from . import llm
+
+# Señales fuertes de información ACTUAL (que la guía estática no puede tener). Si aparecen,
+# enrutamos directo a la web SIN gastar la llamada del router (más barato y más fiable que
+# depender de que el LLM clasifique bien; el router falló mandando "eventos" a la guía).
+_SENAL_WEB = re.compile(
+    r"\b(evento|eventos|feria|ferias|fiesta|fiestas|festival|festivales|concierto|conciertos|"
+    r"agenda|cartelera|hoy|mañana|manana|ahora|actual|actuales|reciente|recientes|proxim\w*|"
+    r"clima|temperatura|llueve|lluvia|pron[oó]stico|"
+    r"precio|precios|cu[aá]nto cuesta|tarifa|tarifas|costo|202\d)\b",
+    re.IGNORECASE,
+)
 
 SYSTEM_ROUTER = (
     "Eres un enrutador de un asistente turístico de Santander, Colombia. Según la pregunta, "
@@ -58,8 +70,16 @@ def _consultar_web(pregunta: str) -> str:
 
 # ------------------------------- Nodos ---------------------------------- #
 def nodo_router(state: EstadoTurismo) -> dict:
-    """1 llamada barata: clasifica la pregunta en guia / web / ambas (default: guia)."""
+    """Clasifica la pregunta en guia / web / ambas.
+
+    Atajo determinista: si hay señales claras de info actual (eventos, clima, precios,
+    fechas), va directo a ``web`` sin llamar al LLM (0 costo y sin depender de que el
+    router acierte). Para el resto, 1 llamada barata de clasificación estructurada.
+    """
     from pydantic import BaseModel, Field
+
+    if _SENAL_WEB.search(state.get("pregunta", "")):
+        return {"ruta": "web"}
 
     class RutaOut(BaseModel):
         destino: Literal["guia", "web", "ambas"] = Field(

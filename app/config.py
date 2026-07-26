@@ -45,6 +45,8 @@ class Settings:
     cohere_embed_model: str = _get("COHERE_EMBED_MODEL", "embed-multilingual-v3.0")
 
     # --- RAG (recuperación por embeddings + FAISS), vía paralela a /ask ---
+    # Directorio con los documentos (PDF) que indexa el RAG (multi-documento).
+    rag_docs_dir: str = _get("RAG_DOCS_DIR", "data")
     # Proveedor de embeddings: "cohere" (gratis en el trial) o "gemini".
     rag_embed_provider: str = _get("RAG_EMBED_PROVIDER", "cohere")
     rag_chunk_size: int = int(_get("RAG_CHUNK_SIZE", "800") or 800)

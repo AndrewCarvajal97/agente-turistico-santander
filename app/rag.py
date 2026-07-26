@@ -49,17 +49,23 @@ class RagSantander:
             cohere_api_key=settings.cohere_api_key, model=settings.cohere_embed_model
         )
 
-    def indexar(self, pdf_path: str | None = None) -> int:
-        """Carga el PDF, lo divide en chunks, construye FAISS, el retriever y la cadena."""
-        from langchain_community.document_loaders import PyPDFLoader
+    def indexar(self, docs_dir: str | None = None) -> int:
+        """Indexa TODOS los PDFs del directorio: chunks, FAISS, retriever y cadena."""
+        from langchain_community.document_loaders import DirectoryLoader, PyPDFLoader
         from langchain_community.vectorstores import FAISS
         from langchain_core.output_parsers import StrOutputParser
         from langchain_core.prompts import ChatPromptTemplate
         from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-        # PyPDFLoader carga una página por Document con metadata (source, page),
-        # que se conserva al dividir con split_documents -> citaciones trazables.
-        paginas = PyPDFLoader(pdf_path or settings.pdf_path).load()
+        # DirectoryLoader + PyPDFLoader: carga todos los PDFs del directorio (una página
+        # por Document con metadata source/page), conservada al dividir -> citaciones
+        # trazables. Escalable: agregar más PDFs a la carpeta los indexa automáticamente.
+        directorio = docs_dir or settings.rag_docs_dir
+        paginas = DirectoryLoader(
+            directorio, glob="**/*.pdf", loader_cls=PyPDFLoader
+        ).load()
+        if not paginas:
+            raise FileNotFoundError(f"No se encontraron PDFs en '{directorio}' para el RAG.")
         splitter = RecursiveCharacterTextSplitter(
             chunk_size=settings.rag_chunk_size, chunk_overlap=settings.rag_chunk_overlap
         )

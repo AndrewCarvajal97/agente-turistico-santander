@@ -263,7 +263,8 @@ datos), y cada herramienta puede usar el LLM que mejor le sirva.
 ## 🔎 RAG real (embeddings + FAISS) — vía paralela
 
 Además del enfoque de **contexto completo** de `/ask`, el proyecto incluye un **RAG clásico**
-en `POST /rag/ask` ([rag.py](app/rag.py)): el documento se divide en *chunks*
+en `POST /rag/ask` ([rag.py](app/rag.py)): se cargan **todos los PDFs** de una carpeta con
+`DirectoryLoader` (multi-documento, escalable), se dividen en *chunks*
 (`RecursiveCharacterTextSplitter`), cada chunk se convierte en un **vector semántico** con
 **embeddings de Cohere** (o Gemini, configurable), y se indexa en **FAISS**. La recuperación
 usa un *retriever* con **umbral de similitud** (`similarity_score_threshold`): por cada

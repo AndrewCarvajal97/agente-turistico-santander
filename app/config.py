@@ -78,6 +78,11 @@ class Settings:
     # Clave de administrador para acciones protegidas (p. ej. análisis de datos).
     admin_key: str = _get("ADMIN_KEY")
 
+    # LangSmith (observabilidad): LangChain lo activa por sí solo leyendo LANGSMITH_*
+    # de las variables de entorno (cargadas por load_dotenv). Esto es solo para reportar
+    # su estado; opt-in con LANGSMITH_TRACING=true.
+    langsmith_tracing: bool = _get("LANGSMITH_TRACING", "false").lower() == "true"
+
     def validar(self) -> None:
         """Lanza un error claro si falta la API key del proveedor activo."""
         prov = self.llm_provider.lower()

@@ -289,6 +289,13 @@ El backend de la base vectorial se elige con `RAG_VECTORSTORE`, sin tocar el res
 Al **agregar o quitar PDFs**, `POST /rag/reindex` (protegido con `ADMIN_KEY`) reconstruye el
 índice (`forzar=True`) para que tome los documentos actuales.
 
+### 🔭 Observabilidad con LangSmith (opcional)
+
+El proyecto es compatible con **LangSmith** para *tracing*: ver cada paso de las cadenas
+(chunks recuperados, prompt enviado, tokens, latencia). Es **opt-in** vía variables de entorno
+(`LANGSMITH_TRACING=true`, `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT`); LangChain lo activa solo,
+sin cambios de código, y sin ellas todo funciona igual. `GET /health` reporta si está activo.
+
 ## 🕸️ Agente con grafo de estados (LangGraph) — vía paralela
 
 En `POST /grafo/ask` ([graph.py](app/graph.py)) hay un agente modelado como un **grafo de

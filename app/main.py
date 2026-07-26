@@ -55,6 +55,8 @@ async def lifespan(app: FastAPI):
         settings.validar()
         n = agent.indexar()
         print(f"[startup] Documento cargado ({n} caracteres).")
+        if settings.langsmith_tracing:
+            print("[startup] LangSmith tracing: ACTIVO (observabilidad de cadenas).")
     except Exception as exc:  # noqa: BLE001 - se registra para diagnóstico
         print(f"[startup] Advertencia: no se pudo cargar el documento -> {exc}")
     yield
@@ -91,7 +93,12 @@ class AdminIn(BaseModel):
 # ------------------------------- Endpoints ------------------------------ #
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok", "documento_cargado": agent.esta_listo()}
+    return {
+        "status": "ok",
+        "documento_cargado": agent.esta_listo(),
+        "rag_vectorstore": settings.rag_vectorstore,
+        "langsmith_tracing": settings.langsmith_tracing,
+    }
 
 
 @app.post("/ask", response_model=RespuestaOut)

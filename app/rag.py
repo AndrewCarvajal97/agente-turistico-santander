@@ -107,6 +107,8 @@ class RagSantander:
         el proyecto puede crecer a muchos documentos sin recalcular todo. Solo se suben
         los fragmentos si el índice está vacío (o si ``forzar`` es True).
         """
+        import time
+
         from langchain_pinecone import PineconeVectorStore
         from pinecone import Pinecone, ServerlessSpec
 
@@ -132,6 +134,15 @@ class RagSantander:
                     cloud=settings.pinecone_cloud, region=settings.pinecone_region
                 ),
             )
+            # El índice recién creado tarda unos segundos en quedar "listo".
+            for _ in range(30):
+                estado = pc.describe_index(nombre).status
+                listo = getattr(estado, "ready", None)
+                if listo is None and hasattr(estado, "get"):
+                    listo = estado.get("ready")
+                if listo:
+                    break
+                time.sleep(1)
 
         index = pc.Index(nombre)
         vs = PineconeVectorStore(index=index, embedding=embeddings)

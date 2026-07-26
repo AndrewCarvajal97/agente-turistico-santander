@@ -49,6 +49,8 @@ class Settings:
     rag_docs_dir: str = _get("RAG_DOCS_DIR", "data")
     # Proveedor de embeddings: "cohere" (gratis en el trial) o "gemini".
     rag_embed_provider: str = _get("RAG_EMBED_PROVIDER", "cohere")
+    # Estrategia de chunking: "recursive" (por caracteres) o "semantic" (por significado).
+    rag_chunking: str = _get("RAG_CHUNKING", "recursive")
     rag_chunk_size: int = int(_get("RAG_CHUNK_SIZE", "800") or 800)
     rag_chunk_overlap: int = int(_get("RAG_CHUNK_OVERLAP", "100") or 100)
     rag_top_k: int = int(_get("RAG_TOP_K", "4") or 4)

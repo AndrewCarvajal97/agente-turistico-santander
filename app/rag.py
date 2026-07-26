@@ -66,9 +66,17 @@ class RagSantander:
         ).load()
         if not paginas:
             raise FileNotFoundError(f"No se encontraron PDFs en '{directorio}' para el RAG.")
-        splitter = RecursiveCharacterTextSplitter(
-            chunk_size=settings.rag_chunk_size, chunk_overlap=settings.rag_chunk_overlap
-        )
+
+        # Chunking: "semantic" divide por significado (usa embeddings); "recursive"
+        # (por defecto) divide por caracteres con solapamiento.
+        if settings.rag_chunking.lower() == "semantic":
+            from langchain_experimental.text_splitter import SemanticChunker
+
+            splitter = SemanticChunker(self._embeddings())
+        else:
+            splitter = RecursiveCharacterTextSplitter(
+                chunk_size=settings.rag_chunk_size, chunk_overlap=settings.rag_chunk_overlap
+            )
         fragmentos = splitter.split_documents(paginas)
         vectorstore = FAISS.from_documents(fragmentos, self._embeddings())
         # Retriever con umbral de similitud: descarta fragmentos poco relevantes.

@@ -18,10 +18,22 @@ documentos grandes o a múltiples fuentes, donde inyectar todo el texto no es vi
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 from . import llm
 from .config import settings
+
+# Palabras demasiado comunes en la guía para medir si un fragmento fue realmente usado.
+_PALABRAS_COMUNES = {
+    "santander", "colombia", "departamento", "lugares", "informacion", "tambien",
+    "puedes", "sobre", "donde", "cuando", "estas", "estos", "entre", "principales",
+}
+
+
+def _terminos(texto: str) -> set:
+    """Términos significativos (>=5 letras, sin palabras comunes) para medir solape."""
+    return {t for t in re.findall(r"[a-záéíóúñü]{5,}", (texto or "").lower())} - _PALABRAS_COMUNES
 
 SYSTEM_PROMPT_RAG = (
     "Eres un asistente turístico experto en Santander, Colombia. Responde en español, de "
@@ -311,14 +323,20 @@ class RagSantander:
         if respuesta.strip().rstrip(".!?¡¿").lower() in ("no lo sé", "no lo se"):
             return self._no_encontrado()
 
-        # Citaciones trazables: fragmento + página de origen (metadata del loader).
+        # Citaciones trazables: SOLO los fragmentos que realmente comparten contenido con
+        # la respuesta (>=2 términos significativos en común). Así, si el modelo responde
+        # con su persona (p. ej. "¿quién eres?"), no se listan fuentes irrelevantes.
+        terminos_resp = _terminos(respuesta)
+        usados = [
+            d for d in documentos if len(terminos_resp & _terminos(d.page_content)) >= 2
+        ]
         citaciones = [
             {
                 "contenido": d.page_content[:180].strip() + "…",
                 "pagina": (d.metadata.get("page", 0) or 0) + 1,
                 "fuente": os.path.basename(d.metadata.get("source", "")),
             }
-            for d in documentos
+            for d in usados
         ]
         return {
             "respuesta": respuesta,

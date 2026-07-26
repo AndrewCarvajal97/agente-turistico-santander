@@ -43,6 +43,56 @@ SYSTEM_RESPUESTA = (
     "unidades de medida que no aparezcan en la pregunta o el resultado. Sé conciso."
 )
 
+# --- Herramientas personalizadas (curso): exploradora y estadística ---
+# Los metadatos se calculan en Python (reales) y el LLM redacta el informe.
+PROMPT_EXPLORADORA = """Eres un analista de datos encargado de presentar un resumen informativo sobre un DataFrame.
+
+================= INFORMACIÓN DEL DATAFRAME =================
+
+Dimensiones: {shape}
+
+Columnas y tipos de datos:
+{columns}
+
+Valores nulos por columna:
+{nulos}
+
+Cadenas 'nan' (en cualquier capitalización) por columna:
+{nans_str}
+
+Filas duplicadas: {duplicados}
+
+============================================================
+
+Con base en esta información, redacta un resumen claro y organizado en español que contenga:
+
+1. Un título: ## Reporte de información general sobre el dataset
+2. La dimensión total del DataFrame
+3. La descripción de cada columna (nombre, tipo de dato y qué representa)
+4. Las columnas con datos nulos y su cantidad
+5. Las columnas con cadenas 'nan' y su cantidad
+6. La existencia (o no) de datos duplicados
+7. Un párrafo sobre los análisis que se pueden realizar con estos datos
+8. Un párrafo sobre los tratamientos que se pueden aplicar a los datos
+"""
+
+PROMPT_ESTADISTICA = """Eres un analista de datos encargado de interpretar resultados estadísticos de una base de datos.
+
+================= ESTADÍSTICAS DESCRIPTIVAS =================
+
+{resumen}
+
+============================================================
+
+Con base en estos datos, elabora en español un resumen explicativo con lenguaje claro y fluido que incluya:
+
+1. Un título: ## Informe de estadísticas descriptivas
+2. Una visión general de las estadísticas de las columnas numéricas
+3. Un párrafo sobre cada columna, comentando sus valores
+4. Identificación de posibles valores atípicos según el mínimo y el máximo
+5. Recomendaciones de próximos pasos en el análisis según los patrones identificados
+"""
+
 # Proveedores en orden de preferencia para tool-calling (Groq tiene el mejor soporte).
 _CANDIDATOS_TOOLS = ("groq", "gemini", "cohere")
 
@@ -133,6 +183,44 @@ class AgenteDatos:
             prompt | llm.construir_chat_model(temperature=0) | StrOutputParser()
         ).invoke({"columnas": df.columns.to_list(), "pregunta": pregunta})
         return _limpiar_codigo(texto)
+
+    def _redactar(self, instruccion: str) -> str:
+        """Pasa una instrucción ya construida al LLM (con respaldo) y devuelve el texto."""
+        from langchain_core.output_parsers import StrOutputParser
+        from langchain_core.prompts import ChatPromptTemplate
+
+        prompt = ChatPromptTemplate.from_messages([("human", "{contenido}")])
+        texto = (
+            prompt | llm.construir_chat_model(temperature=0.3) | StrOutputParser()
+        ).invoke({"contenido": instruccion})
+        return (texto or "").strip()
+
+    def reporte_general(self, df) -> str:
+        """Herramienta exploradora: panorama general del DataFrame (metadatos reales)."""
+        shape = f"{df.shape[0]} filas x {df.shape[1]} columnas"
+        columns = "\n".join(f"- {c}: {df[c].dtype}" for c in df.columns)
+        nulos_serie = df.isnull().sum()
+        nulos = "\n".join(f"- {c}: {int(n)}" for c, n in nulos_serie.items() if n) or "Ninguna"
+        nans = {}
+        for c in df.columns:
+            if df[c].dtype == object:
+                cnt = int(df[c].astype(str).str.fullmatch(r"(?i)nan").sum())
+                if cnt:
+                    nans[c] = cnt
+        nans_str = "\n".join(f"- {c}: {n}" for c, n in nans.items()) or "Ninguna"
+        duplicados = int(df.duplicated().sum())
+        instruccion = PROMPT_EXPLORADORA.format(
+            shape=shape, columns=columns, nulos=nulos, nans_str=nans_str, duplicados=duplicados
+        )
+        return self._redactar(instruccion)
+
+    def reporte_estadistico(self, df) -> str:
+        """Herramienta estadística: interpreta df.describe() de las columnas numéricas."""
+        numericas = df.select_dtypes(include="number")
+        if numericas.empty:
+            return "El dataset no tiene columnas numéricas para un resumen estadístico."
+        resumen = numericas.describe().to_string()
+        return self._redactar(PROMPT_ESTADISTICA.format(resumen=resumen))
 
     def analizar(self, df, pregunta: str) -> dict:
         """Returns: {"codigo": str, "resultado": str, "respuesta": str}."""

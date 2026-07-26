@@ -256,14 +256,20 @@ def rag_reindex(entrada: AdminIn) -> dict:
 @app.post("/datos/analizar")
 async def datos_analizar(
     file: UploadFile = File(...),
-    pregunta: str = Form(...),
     clave: str = Form(...),
+    accion: str = Form("pregunta"),
+    pregunta: str = Form(""),
 ) -> dict:
-    """Agente de análisis de datos (curso): sube un CSV y pregunta sobre él.
+    """Agente de análisis de datos (curso): sube un CSV y analízalo.
 
-    El LLM genera código pandas, la herramienta REPL lo EJECUTA sobre el DataFrame y se
-    responde en lenguaje natural con el resultado real. PROTEGIDO con ADMIN_KEY porque
-    ejecuta código Python generado por el LLM (no exponer al público sin sandbox).
+    Acciones (herramientas personalizadas):
+      - "explorar"     -> reporte de información general del DataFrame
+      - "estadisticas" -> informe de estadísticas descriptivas
+      - "pregunta"     -> el LLM genera código pandas, la herramienta REPL lo EJECUTA
+                          sobre el DataFrame y responde en lenguaje natural (usa `pregunta`)
+
+    PROTEGIDO con ADMIN_KEY porque ejecuta código Python generado por el LLM
+    (no exponer al público sin sandbox).
     """
     if not settings.admin_key:
         raise HTTPException(status_code=503, detail="No disponible: falta ADMIN_KEY.")
@@ -280,7 +286,11 @@ async def datos_analizar(
         from .datos import agente_datos
 
         df = pd.read_csv(io.BytesIO(contenido))
-        return agente_datos.analizar(df, pregunta)
+        if accion == "explorar":
+            return {"tipo": "explorar", "respuesta": agente_datos.reporte_general(df)}
+        if accion == "estadisticas":
+            return {"tipo": "estadisticas", "respuesta": agente_datos.reporte_estadistico(df)}
+        return {"tipo": "pregunta", **agente_datos.analizar(df, pregunta)}
     except llm.SinCupoError:
         raise HTTPException(status_code=503, detail=MSG_SIN_CUPO)
     except Exception as exc:  # noqa: BLE001

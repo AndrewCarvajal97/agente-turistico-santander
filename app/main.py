@@ -261,6 +261,17 @@ def grafo_ask(entrada: PreguntaIn) -> dict:
         )
 
 
+@app.get("/grafo/diagrama")
+def grafo_diagrama() -> dict:
+    """Devuelve el grafo de estados en sintaxis Mermaid (para visualizarlo)."""
+    try:
+        from . import graph
+
+        return {"mermaid": graph.diagrama_mermaid()}
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"No se pudo generar el diagrama: {exc}")
+
+
 @app.post("/reload")
 def reload() -> dict:
     try:

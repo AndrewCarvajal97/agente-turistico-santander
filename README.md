@@ -280,18 +280,25 @@ documentos grandes o múltiples fuentes (requiere `COHERE_API_KEY`).
 En `POST /grafo/ask` ([graph.py](app/graph.py)) hay un agente modelado como un **grafo de
 estados** con `StateGraph` (LangGraph). El flujo es determinista y conecta todo lo construido:
 
-```
-START → triaje → (arista condicional)
-                   ├─ auto_resolver → responde con el RAG (con citaciones)
-                   ├─ pedir_info    → pide más detalles al usuario
-                   └─ abrir_ticket  → registra la solicitud (gestión humana)
-                                      → END
+```mermaid
+graph TD
+    START([inicio]) --> triaje
+    triaje -. rag .-> auto_resolver
+    triaje -. info .-> pedir_info
+    triaje -. ticket .-> abrir_ticket
+    auto_resolver -. ok .-> FIN([fin])
+    auto_resolver -. info .-> pedir_info
+    auto_resolver -. ticket .-> abrir_ticket
+    pedir_info --> FIN
+    abrir_ticket --> FIN
 ```
 
 El **triaje** clasifica la consulta con `with_structured_output` (Pydantic + `Literal`:
-`auto_resolver` / `pedir_info` / `abrir_ticket`), y una **arista condicional** enruta al nodo
-correspondiente. El estado se propaga con un `TypedDict` (`AgentState`). Validado en vivo: cada
-tipo de consulta se enruta al nodo correcto.
+`auto_resolver` / `pedir_info` / `abrir_ticket`) y una **arista condicional** enruta al nodo
+correspondiente. Tras el **RAG** hay una **segunda arista condicional**: si respondió, termina;
+si no, según la consulta abre un ticket (palabras como "reservar") o pide más info. El nodo de
+ticket incluye la **urgencia** del triaje. El estado se propaga con un `TypedDict` (`AgentState`).
+El endpoint `GET /grafo/diagrama` devuelve el grafo en Mermaid. Validado en vivo.
 
 ## 🗺️ Roadmap / próximos pasos
 

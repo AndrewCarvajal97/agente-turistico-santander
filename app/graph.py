@@ -47,8 +47,15 @@ class AgentState(TypedDict, total=False):
     triaje: dict
     respuesta: Optional[str]
     citaciones: Optional[list]
-    documentos_encontrados: Optional[bool]
+    rag_exito: Optional[bool]
     accion_final: str
+
+
+# Palabras clave que sugieren gestión humana (abrir ticket) cuando el RAG no responde.
+KEYWORDS_TICKET = [
+    "reservar", "reserva", "cotiz", "contactar", "guía humano", "guia humano",
+    "queja", "reclamo", "personaliz", "excepción", "excepcion", "autoriz",
+]
 
 
 # --------------------------------------------------------------------- #
@@ -77,7 +84,7 @@ def nodo_auto_resolver(state: AgentState) -> dict:
     return {
         "respuesta": r["respuesta"],
         "citaciones": r["citaciones"],
-        "documentos_encontrados": r["documentos_encontrados"],
+        "rag_exito": r["documentos_encontrados"],
         "accion_final": "AUTO_RESOLVER",
     }
 
@@ -94,10 +101,12 @@ def nodo_pedir_info(state: AgentState) -> dict:
 
 
 def nodo_abrir_ticket(state: AgentState) -> dict:
-    """Registra la solicitud como un 'ticket' para gestión humana."""
+    """Registra la solicitud como un 'ticket' para gestión humana (con la urgencia)."""
+    urgencia = (state.get("triaje") or {}).get("urgencia", "baja")
     return {
-        "respuesta": "He registrado tu solicitud como una petición para nuestro equipo. "
-        "Un asesor turístico la atenderá pronto. 🎫",
+        "respuesta": f"He registrado tu solicitud (urgencia {urgencia}) como una petición "
+        "para nuestro equipo. Un asesor turístico la atenderá pronto. 🎫",
+        "citaciones": [],
         "accion_final": "ABRIR_TICKET",
     }
 
@@ -108,6 +117,16 @@ def arista_decision_triaje(state: AgentState) -> str:
     return {"auto_resolver": "rag", "pedir_info": "info", "abrir_ticket": "ticket"}.get(
         decision, "rag"
     )
+
+
+def arista_decision_rag(state: AgentState) -> str:
+    """Decide el flujo DESPUÉS del RAG: fin (ok), abrir ticket o pedir más info."""
+    if state.get("rag_exito"):
+        return "ok"  # el RAG respondió → terminar
+    pregunta = (state.get("pregunta") or "").lower()
+    if any(k in pregunta for k in KEYWORDS_TICKET):
+        return "ticket"  # el RAG no supo, pero es una solicitud de gestión humana
+    return "info"  # el RAG no supo → pedir más contexto
 
 
 # --------------------------------------------------------------------- #
@@ -126,15 +145,29 @@ def _construir_grafo():
     workflow.add_node("abrir_ticket", nodo_abrir_ticket)
 
     workflow.add_edge(START, "triaje")
+    # Tras el triaje: enruta a RAG, pedir info o abrir ticket.
     workflow.add_conditional_edges(
         "triaje",
         arista_decision_triaje,
         {"rag": "auto_resolver", "info": "pedir_info", "ticket": "abrir_ticket"},
     )
-    workflow.add_edge("auto_resolver", END)
+    # Tras el RAG: si respondió termina; si no, pide info o abre ticket.
+    workflow.add_conditional_edges(
+        "auto_resolver",
+        arista_decision_rag,
+        {"ok": END, "info": "pedir_info", "ticket": "abrir_ticket"},
+    )
     workflow.add_edge("pedir_info", END)
     workflow.add_edge("abrir_ticket", END)
     return workflow.compile()
+
+
+def diagrama_mermaid() -> str:
+    """Devuelve el grafo en sintaxis Mermaid (para visualizarlo)."""
+    global _grafo
+    if _grafo is None:
+        _grafo = _construir_grafo()
+    return _grafo.get_graph().draw_mermaid()
 
 
 def responder(pregunta: str) -> dict:

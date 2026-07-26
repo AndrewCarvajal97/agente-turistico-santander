@@ -230,3 +230,14 @@ def test_grafo_arista_decision_enruta():
     assert arista_decision_triaje({"triaje": {"decision": "pedir_info"}}) == "info"
     assert arista_decision_triaje({"triaje": {"decision": "abrir_ticket"}}) == "ticket"
     assert arista_decision_triaje({}) == "rag"  # por defecto, intenta resolver
+
+
+def test_grafo_arista_decision_rag():
+    from app.graph import arista_decision_rag
+
+    # RAG respondió -> termina.
+    assert arista_decision_rag({"rag_exito": True}) == "ok"
+    # RAG falló y hay palabra clave de gestión -> ticket.
+    assert arista_decision_rag({"rag_exito": False, "pregunta": "Quiero reservar un tour"}) == "ticket"
+    # RAG falló sin palabra clave -> pedir info.
+    assert arista_decision_rag({"rag_exito": False, "pregunta": "algo raro"}) == "info"

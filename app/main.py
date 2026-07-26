@@ -11,6 +11,7 @@ Endpoints:
   POST /admin/analisis -> categoriza las preguntas (admin, requiere clave)
   POST /agente         -> agente orquestador ReAct (LangGraph, paralelo)
   POST /grafo/ask      -> agente con grafo de estados (triaje + RAG, paralelo)
+  POST /datos/analizar -> agente de análisis de datos sobre un CSV (admin, ejecuta código)
   POST /reload         -> recarga el documento fuente
 """
 from __future__ import annotations
@@ -31,6 +32,8 @@ from .memory import ConversationMemory
 
 # Tamaño máximo de imagen aceptado en /vision (5 MB).
 _MAX_IMAGEN = 5 * 1024 * 1024
+# Tamaño máximo de CSV aceptado en /datos/analizar (2 MB).
+_MAX_CSV = 2 * 1024 * 1024
 
 agent = TourismAgent()
 memory = ConversationMemory()
@@ -248,6 +251,41 @@ def rag_reindex(entrada: AdminIn) -> dict:
         raise HTTPException(status_code=503, detail=MSG_SIN_CUPO)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"Error al reindexar: {exc}")
+
+
+@app.post("/datos/analizar")
+async def datos_analizar(
+    file: UploadFile = File(...),
+    pregunta: str = Form(...),
+    clave: str = Form(...),
+) -> dict:
+    """Agente de análisis de datos (curso): sube un CSV y pregunta sobre él.
+
+    El LLM genera código pandas, la herramienta REPL lo EJECUTA sobre el DataFrame y se
+    responde en lenguaje natural con el resultado real. PROTEGIDO con ADMIN_KEY porque
+    ejecuta código Python generado por el LLM (no exponer al público sin sandbox).
+    """
+    if not settings.admin_key:
+        raise HTTPException(status_code=503, detail="No disponible: falta ADMIN_KEY.")
+    if clave != settings.admin_key:
+        raise HTTPException(status_code=401, detail="Clave de administrador incorrecta.")
+    contenido = await file.read()
+    if len(contenido) > _MAX_CSV:
+        raise HTTPException(status_code=413, detail="El CSV supera el tamaño máximo (2 MB).")
+    try:
+        import io
+
+        import pandas as pd
+
+        from .datos import agente_datos
+
+        df = pd.read_csv(io.BytesIO(contenido))
+        return agente_datos.analizar(df, pregunta)
+    except llm.SinCupoError:
+        raise HTTPException(status_code=503, detail=MSG_SIN_CUPO)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[datos] error -> {exc}")
+        raise HTTPException(status_code=400, detail=f"No se pudo analizar el CSV: {exc}")
 
 
 @app.post("/agente")

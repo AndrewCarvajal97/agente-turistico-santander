@@ -11,7 +11,9 @@ from __future__ import annotations
 
 from langchain_core.tools import tool
 
+from . import llm
 from .agent import TourismAgent
+from .config import settings
 from .memory import ConversationMemory
 
 # Instancias propias del orquestador (aisladas del resto de la app).
@@ -46,5 +48,33 @@ def buscar_historial(termino: str) -> str:
     )
 
 
+@tool
+def explicar(tema: str) -> str:
+    """Explica un tema de forma didáctica y sencilla, con ejemplos cotidianos y pensando
+    en el público colombiano. Úsala cuando pidan EXPLICAR o ENSEÑAR un concepto (no para
+    datos concretos de la guía turística)."""
+    plantilla = (
+        "Asume el papel de un profesor didáctico. Explica el tema de forma sencilla, para "
+        "estudiantes de secundaria, con ejemplos cotidianos y, si aplica, pensando en el "
+        "contexto colombiano. Responde en español.\n\nTema: {tema}"
+    )
+    # Esta herramienta usa Cohere específicamente (fuerte en contexto en español);
+    # si no hay clave de Cohere, cae al proveedor por defecto (cadena de respaldo).
+    if settings.cohere_api_key:
+        from langchain_core.output_parsers import StrOutputParser
+        from langchain_core.prompts import PromptTemplate
+        from langchain_cohere import ChatCohere
+
+        cadena = (
+            PromptTemplate(template=plantilla, input_variables=["tema"])
+            | ChatCohere(cohere_api_key=settings.cohere_api_key, model=settings.cohere_model)
+            | StrOutputParser()
+        )
+        return cadena.invoke({"tema": tema})
+    return llm.generar_texto(
+        plantilla.format(tema=tema), "Eres un profesor didáctico. Responde en español.", 1024
+    )
+
+
 # Lista de herramientas disponibles para el orquestador.
-HERRAMIENTAS = [guia_turistica, buscar_historial]
+HERRAMIENTAS = [guia_turistica, buscar_historial, explicar]

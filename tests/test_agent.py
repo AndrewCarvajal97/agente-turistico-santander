@@ -199,4 +199,4 @@ def test_orquestador_registra_herramientas():
     from app.tools import HERRAMIENTAS
 
     nombres = {t.name for t in HERRAMIENTAS}
-    assert {"guia_turistica", "buscar_historial"} <= nombres
+    assert {"guia_turistica", "buscar_historial", "explicar"} <= nombres

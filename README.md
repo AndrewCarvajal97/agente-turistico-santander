@@ -242,9 +242,10 @@ transporte, mejor época para visitar y preguntas frecuentes de Santander, Colom
 Además del ruteo explícito (`/ask`, `/vision`), el proyecto incluye un **agente ReAct**
 opcional en `POST /agente`, construido con **LangGraph** (`create_react_agent`). En lugar de
 un ruteo fijo, el agente **razona y decide** qué herramienta usar según la consulta. Las
-herramientas ([tools.py](app/tools.py)) son `guia_turistica` (Q&A sobre el PDF) y
-`buscar_historial` (búsqueda en la memoria), y la lista es fácil de extender (p. ej. una
-futura herramienta de base de datos).
+herramientas ([tools.py](app/tools.py)) son `guia_turistica` (Q&A sobre el PDF),
+`buscar_historial` (búsqueda en la memoria) y `explicar` (explicación didáctica de un tema,
+usando **Cohere**). La lista es fácil de extender (p. ej. una futura herramienta de base de
+datos), y cada herramienta puede usar el LLM que mejor le sirva.
 
 > Es una vía **paralela** que no altera los endpoints principales. Consume más tokens (razona
 > + actúa en varios pasos), por lo que está pensada para demostración y crecimiento futuro.

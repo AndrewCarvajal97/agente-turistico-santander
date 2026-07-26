@@ -18,11 +18,47 @@ resolver el agotamiento de tokens. Si TODOS los candidatos fallan, se lanza
 from __future__ import annotations
 
 import time
+from threading import Lock
 
 from .config import settings
 
 # Códigos HTTP transitorios del servidor que conviene reintentar en el mismo modelo.
 _TRANSIENT = {500, 502, 503}
+
+# --------------------------------------------------------------------- #
+# Rate limiting por proveedor (para no superar el RPM del free tier)
+# --------------------------------------------------------------------- #
+# Un limitador COMPARTIDO por proveedor: todos los modelos de ese proveedor (incluido
+# el ReAct agent, que encadena varias llamadas) pasan por el mismo "cubo" de tokens, así
+# el ritmo global se mantiene bajo el límite por minuto. El limitador ESPACIA las
+# llamadas (bloquea unos ms), no las descarta, así que evita el 429 sin perder respuestas.
+_rate_limiters: dict[str, object] = {}
+_rate_lock = Lock()
+
+
+def _rate_limiter_para(proveedor: str):
+    """Devuelve el rate limiter compartido del proveedor (o None si está desactivado)."""
+    rpm = {
+        "gemini": settings.gemini_rpm,
+        "groq": settings.groq_rpm,
+        "cohere": settings.cohere_rpm,
+    }.get(proveedor, 0)
+    if rpm <= 0:
+        return None
+    with _rate_lock:
+        lim = _rate_limiters.get(proveedor)
+        if lim is None:
+            from langchain_core.rate_limiters import InMemoryRateLimiter
+
+            lim = InMemoryRateLimiter(
+                requests_per_second=rpm / 60.0,
+                check_every_n_seconds=0.1,
+                # Permite una pequeña ráfaga (p. ej. un turno del agente) y luego
+                # regula; mantenerlo bajo respeta el tope por minuto bajo carga.
+                max_bucket_size=max(1, rpm // 3),
+            )
+            _rate_limiters[proveedor] = lim
+    return lim
 
 
 class SinCupoError(Exception):
@@ -69,6 +105,7 @@ def _generar_gemini(mensaje: str, system_instruction: str, max_tokens: int, mode
         google_api_key=settings.gemini_api_key,
         temperature=0.2,
         max_output_tokens=max_tokens,
+        rate_limiter=_rate_limiter_para("gemini"),
     )
     return _invocar_cadena(chat, mensaje, system_instruction)
 
@@ -85,6 +122,7 @@ def _generar_groq(mensaje: str, system_instruction: str, max_tokens: int, modelo
         api_key=settings.groq_api_key,
         temperature=0.2,
         max_tokens=min(max_tokens, 1024),
+        rate_limiter=_rate_limiter_para("groq"),
     )
     return _invocar_cadena(chat, mensaje, system_instruction)
 
@@ -98,6 +136,7 @@ def _generar_cohere(mensaje: str, system_instruction: str, max_tokens: int, mode
         model=modelo,
         cohere_api_key=settings.cohere_api_key,
         temperature=0.2,
+        rate_limiter=_rate_limiter_para("cohere"),
     )
     return _invocar_cadena(chat, mensaje, system_instruction)
 
@@ -144,6 +183,7 @@ def _cadena_intentos() -> list[tuple[str, str]]:
 # --------------------------------------------------------------------- #
 def _construir_modelo(proveedor: str, modelo: str, temperature: float = 0.2):
     """Crea un chat model de LangChain para un (proveedor, modelo) concreto."""
+    limiter = _rate_limiter_para(proveedor)
     if proveedor == "gemini":
         from langchain_google_genai import ChatGoogleGenerativeAI
 
@@ -152,12 +192,16 @@ def _construir_modelo(proveedor: str, modelo: str, temperature: float = 0.2):
             google_api_key=settings.gemini_api_key,
             temperature=temperature,
             max_output_tokens=settings.max_output_tokens,
+            rate_limiter=limiter,
         )
     if proveedor == "cohere":
         from langchain_cohere import ChatCohere
 
         return ChatCohere(
-            model=modelo, cohere_api_key=settings.cohere_api_key, temperature=temperature
+            model=modelo,
+            cohere_api_key=settings.cohere_api_key,
+            temperature=temperature,
+            rate_limiter=limiter,
         )
     from langchain_groq import ChatGroq
 
@@ -166,6 +210,7 @@ def _construir_modelo(proveedor: str, modelo: str, temperature: float = 0.2):
         api_key=settings.groq_api_key,
         temperature=temperature,
         max_tokens=min(settings.max_output_tokens, 1024),
+        rate_limiter=limiter,
     )
 
 

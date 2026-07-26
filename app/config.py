@@ -18,13 +18,24 @@ def _get(nombre: str, por_defecto: str = "") -> str:
 class Settings:
     """Configuración inmutable de la aplicación."""
 
-    # Proveedor de LLM: "gemini", "groq" o "cohere"
+    # Proveedor de LLM principal: "gemini", "groq" o "cohere". El resto queda como
+    # respaldo automático en ese orden (p. ej. gemini -> groq -> cohere).
     llm_provider: str = _get("LLM_PROVIDER", "gemini")
+
+    # --- Límite de peticiones por MINUTO por proveedor (rate limiter del cliente) ---
+    # Evita superar el RPM del free tier — clave para el agente ReAct, que hace varias
+    # llamadas seguidas. El limitador es compartido por proveedor y ESPACIA (no descarta)
+    # las llamadas. 0 = sin límite. Defaults por debajo del tope real de cada free tier.
+    gemini_rpm: int = int(_get("GEMINI_RPM", "12") or 12)   # tope real ~15/min
+    groq_rpm: int = int(_get("GROQ_RPM", "25") or 25)       # tope real ~30/min
+    cohere_rpm: int = int(_get("COHERE_RPM", "18") or 18)   # trial ~20/min
 
     # --- Google Gemini ---
     gemini_api_key: str = _get("GEMINI_API_KEY")
-    # Modelo de chat (alias "latest" para no depender de versiones que se deprecan)
-    chat_model: str = _get("GEMINI_CHAT_MODEL", "gemini-flash-latest")
+    # Modelo de chat. Se fija en 2.5 Flash porque tiene el free tier más holgado
+    # (15 RPM / 1M TPM / 1500 RPD). El alias "latest" puede saltar a Gemini 3 Flash,
+    # que baja a 10 RPM / 250k TPM; para la demo preferimos el margen de 2.5 Flash.
+    chat_model: str = _get("GEMINI_CHAT_MODEL", "gemini-2.5-flash")
     # Tope de tokens de salida (amplio para que el "pensamiento" del modelo no
     # trunque la respuesta final).
     max_output_tokens: int = int(_get("MAX_OUTPUT_TOKENS", "50000") or 50000)

@@ -221,14 +221,27 @@ se consumen por API, por lo que basta con definir la clave del proveedor elegido
 3. (Opcional) Contenerizar con el `Dockerfile` incluido y correr con Docker.
 
 > 🔗 **Aplicación desplegada (OCI Compute — Bogotá):** http://149.130.177.89:8000
-> 🖼️ **Evidencia del despliegue:** capturas de la consola de OCI y de la app en
-> ejecución, en la carpeta [`docs/`](docs/).
+> 🖼️ **Evidencia del despliegue:** ver las [capturas de la aplicación](#-capturas-de-la-aplicación-desplegada-en-oci) más abajo.
 
 **Detalles del despliegue:**
 - Región: **Colombia Central (Bogotá)** — `sa-bogota-1`
 - Compartimento: `reto-alura` &nbsp;·&nbsp; VCN: `VCN-reto-alura` (subred pública)
 - Instancia: `VM.Standard.E5.Flex` (Oracle Linux 9)
 - Servidor: `uvicorn` en el puerto `8000` (abierto en firewalld + Security List)
+
+### 📸 Capturas de la aplicación (desplegada en OCI)
+
+La aplicación corriendo en la instancia OCI (nota la IP pública `149.130.177.89:8000` en la barra de direcciones):
+
+![Interfaz del agente turístico de Santander](docs/app-interfaz.png)
+
+**Fase "Contexto completo"** — responde con el documento completo e indica la fuente:
+
+![Fase contexto completo respondiendo la capital de Santander](docs/app-contexto-completo.png)
+
+**Fase "RAG · base vectorial"** — recupera los fragmentos relevantes y muestra las **citaciones** (página + archivo):
+
+![Fase RAG con citaciones de la guía](docs/app-rag-citaciones.png)
 
 ---
 

@@ -124,10 +124,15 @@
     .badge.ctx{background:rgba(0,135,81,.2);color:#7ee0b4}
     .badge.rag{background:rgba(227,28,35,.2);color:#ff9ba0}
     .badge.web{background:rgba(255,199,44,.2);color:var(--yellow)}
+    .badge.itin{background:rgba(0,180,160,.2);color:#7fe9d8}
+    .badge.grafo{background:rgba(150,120,255,.2);color:#c9b8ff}
     .badge .ruta{font-weight:600;opacity:.85;letter-spacing:0}
     .wsec{font-weight:800;margin:11px 0 4px;color:var(--ink)}
     .wline{margin:3px 0}
-    .wline a{color:var(--yellow);word-break:break-all}
+    .wli{margin:2px 0;padding-left:16px;position:relative}
+    .wli::before{content:"•";position:absolute;left:3px;color:var(--green)}
+    .wline a,.wli a{color:var(--yellow);word-break:break-all}
+    body.hc .wli::before{color:#000}
     .dlpdf{display:inline-flex;align-items:center;gap:7px;margin-top:12px;padding:9px 13px;border-radius:11px;
       font-weight:700;font-size:.8rem;text-decoration:none;color:#fff;
       background:linear-gradient(135deg,var(--green-d),var(--green));border:1px solid var(--line);
@@ -327,6 +332,8 @@
         <div class="subacts">
           <button class="subact" onclick="document.getElementById('img').click()">📷 Identificar por foto</button>
           <input type="file" id="img" accept="image/*" style="display:none" />
+          <button class="subact" onclick="generarItinerario()" title="Genera un itinerario de viaje (multiagente: plan → investigar → redactar)">🧳 Generar itinerario</button>
+          <button class="subact" onclick="grafoTriaje()" title="Agente con grafo de estados: clasifica (triaje) y responde vía RAG / pedir info / ticket">🕸️ Grafo (triaje)</button>
           <button class="subact" onclick="adminAnalisis()">🔐 Análisis de conversaciones</button>
         </div>
         <div id="voice"><span style="width:9px;height:9px;border-radius:50%;background:var(--red);display:inline-block;animation:breathe .8s infinite"></span> Escuchando… habla ahora.</div>
@@ -406,9 +413,10 @@
           cd.appendChild(mt);det.appendChild(cd);});bub.appendChild(det);}
       nombre(wrap,'Santy · Guía IA');box.scrollTop=box.scrollHeight;}
     function cargando(){const{bub,wrap}=fila('bot');bub.innerHTML='<span class="dots"><i></i><i></i><i></i></span>';return wrap.parentNode;}
-    /* Loader con etiqueta (para fases NO streaming como Guía + Web, que tardan unos segundos). */
-    function cargandoTxt(html){const{bub,wrap}=fila('bot');
-      bub.innerHTML='<span class="badge web">🌐 Guía + Web</span><br><span class="wloading">'+html+' <span class="dots"><i></i><i></i><i></i></span></span>';
+    /* Loader con etiqueta (para acciones NO streaming que tardan unos segundos). */
+    function cargandoTxt(html,badge){const{bub,wrap}=fila('bot');
+      const b=badge||'<span class="badge web">🌐 Guía + Web</span>';
+      bub.innerHTML=b+'<br><span class="wloading">'+html+' <span class="dots"><i></i><i></i><i></i></span></span>';
       return wrap.parentNode;}
 
     /* Burbuja del bot para streaming: badge + span de texto vacío que se va llenando */
@@ -448,10 +456,16 @@
           const a=document.createElement('a');a.href=m[1];a.textContent=m[1];a.target='_blank';a.rel='noopener noreferrer';padre.appendChild(a);
           last=m.index+m[1].length; }
         if(last<linea.length)padre.appendChild(document.createTextNode(linea.slice(last)));};
+      // Inline: **negrita** (seguro, sin innerHTML) + enlaces clicables.
+      const inline=(txt,padre)=>{txt.split(/(\*\*[^*]+\*\*)/g).forEach(p=>{
+        if(/^\*\*[^*]+\*\*$/.test(p)){const b=document.createElement('strong');b.textContent=p.slice(2,-2);padre.appendChild(b);}
+        else if(p) linkify(p,padre);});};
       (texto||'').split('\n').forEach(linea=>{const t=linea.trim();
         if(!t){bub.appendChild(document.createElement('br'));return;}
-        if(t.startsWith('### ')){const h=document.createElement('div');h.className='wsec';h.textContent=t.slice(4);bub.appendChild(h);return;}
-        const p=document.createElement('div');p.className='wline';linkify(t.replace(/\*\*/g,''),p);bub.appendChild(p);});
+        if(/^#{1,4}\s/.test(t)){const h=document.createElement('div');h.className='wsec';inline(t.replace(/^#{1,4}\s/,''),h);bub.appendChild(h);return;}
+        const mb=t.match(/^[*+\-]\s+(.*)/);
+        if(mb){const li=document.createElement('div');li.className='wli';inline(mb[1],li);bub.appendChild(li);return;}
+        const p=document.createElement('div');p.className='wline';inline(t,p);bub.appendChild(p);});
     }
     function msgWeb(d){const{bub,wrap}=fila('bot');
       const b=document.createElement('span');b.className='badge web';b.textContent='🌐 Guía + Web';
@@ -563,6 +577,49 @@
     function clearChat(){box.innerHTML='';msgBot('Conversación reiniciada. ¿En qué te ayudo sobre Santander?');}
 
     /* Admin: análisis de conversaciones */
+    /* Itinerario multiagente (/itinerario): plan → investigar (web+guía) → redactar → revisar. */
+    async function generarItinerario(){
+      let t=input.value.trim();
+      if(!t){t=prompt('¿Qué viaje quieres planear en Santander?','un fin de semana de aventura en San Gil');if(!t)return;}
+      msgUser('🧳 Itinerario: '+t); input.value='';
+      const load=cargandoTxt('Armando tu itinerario (plan → investigar → redactar)…','<span class="badge itin">🧳 Itinerario</span>');
+      try{
+        const r=await fetch('/itinerario',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pregunta:t,session_id:SESSION_ID})});
+        load.remove();
+        if(!r.ok){const d=await r.json().catch(()=>({}));msgBot('⚠️ '+(d.detail||'Error generando el itinerario.'));return;}
+        const d=await r.json();
+        const {bub,wrap}=fila('bot');
+        const b=document.createElement('span');b.className='badge itin';
+        b.textContent='🧳 Itinerario'+(d.revisiones?(' · '+d.revisiones+' revisión(es)'):'');
+        bub.appendChild(b);bub.appendChild(document.createElement('br'));
+        renderRico(bub, d.itinerario||'No pude generar el itinerario.');
+        nombre(wrap,'Santy · Guía IA');box.scrollTop=box.scrollHeight;
+        lastReply=d.itinerario||''; if(ttsOn) speak(lastReply);
+      }catch(e){if(load&&load.parentNode)load.remove();msgBot('⚠️ No se pudo conectar con el servidor.');}
+    }
+
+    /* Agente con grafo de estados (/grafo/ask): triaje → RAG / pedir info / abrir ticket. */
+    async function grafoTriaje(){
+      let t=input.value.trim();
+      if(!t){t=prompt('Consulta para el grafo de estados (triaje):','quiero reservar un tour por el Cañón del Chicamocha');if(!t)return;}
+      msgUser(t); input.value='';
+      const load=cargandoTxt('Clasificando (triaje) y respondiendo…','<span class="badge grafo">🕸️ Grafo · triaje</span>');
+      try{
+        const r=await fetch('/grafo/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pregunta:t,session_id:SESSION_ID})});
+        load.remove();
+        if(!r.ok){const d=await r.json().catch(()=>({}));msgBot('⚠️ '+(d.detail||'Error en el grafo.'));return;}
+        const d=await r.json();
+        const {bub,wrap}=fila('bot');
+        const b=document.createElement('span');b.className='badge grafo';
+        b.textContent='🕸️ Grafo · triaje'+(d.decision?(' → '+d.decision):'');
+        bub.appendChild(b);bub.appendChild(document.createElement('br'));
+        const s=document.createElement('span');s.textContent=d.respuesta||'';bub.appendChild(s);
+        if(d.citaciones&&d.citaciones.length)agregarCitas(bub,d.citaciones);
+        nombre(wrap,'Santy · Guía IA');box.scrollTop=box.scrollHeight;
+        lastReply=d.respuesta||''; if(ttsOn) speak(lastReply);
+      }catch(e){if(load&&load.parentNode)load.remove();msgBot('⚠️ No se pudo conectar con el servidor.');}
+    }
+
     async function adminAnalisis(){
       const clave=prompt('🔐 Clave de administrador (demo para pruebas: admin1):','admin1');if(!clave)return;
       const load=cargando();

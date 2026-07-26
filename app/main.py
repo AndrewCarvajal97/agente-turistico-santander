@@ -439,7 +439,7 @@ def agente_endpoint(entrada: PreguntaIn) -> dict:
     try:
         from . import orchestrator  # import perezoso (solo si se usa el agente)
 
-        return orchestrator.responder(entrada.pregunta)
+        return orchestrator.responder(entrada.pregunta, session_id=entrada.session_id)
     except Exception as exc:  # noqa: BLE001
         print(f"[agente] error -> {exc}")
         raise HTTPException(

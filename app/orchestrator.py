@@ -29,36 +29,51 @@ _agente_cache = None
 
 
 def _get_agente():
-    """Crea (una sola vez) el agente ReAct con el modelo y las herramientas."""
+    """Crea (una sola vez) el agente ReAct con modelo, herramientas y **memoria**.
+
+    El `checkpointer` (MemorySaver) da **persistencia** por hilo: el agente recuerda la
+    conversación entre turnos (se pasa el `thread_id` en `responder`). En memoria del
+    proceso — para que sobreviva reinicios, se cambiaría por `SqliteSaver`.
+    """
     global _agente_cache
     if _agente_cache is None:
+        from langgraph.checkpoint.memory import MemorySaver
         from langgraph.prebuilt import create_react_agent
 
         # Un solo modelo (los agentes usan bind_tools; sin .with_fallbacks()).
         modelo = llm.construir_chat_model(temperature=0, con_respaldo=False)
-        _agente_cache = create_react_agent(modelo, HERRAMIENTAS, prompt=SYSTEM_ORQUESTADOR)
+        _agente_cache = create_react_agent(
+            modelo, HERRAMIENTAS, prompt=SYSTEM_ORQUESTADOR, checkpointer=MemorySaver()
+        )
     return _agente_cache
 
 
-def responder(pregunta: str) -> dict:
+def responder(pregunta: str, session_id: str = "") -> dict:
     """Ejecuta el agente orquestador y devuelve la respuesta + herramientas usadas.
 
     Aplica un **tope de pasos** (`recursion_limit`, equivale al max_iterations del ReAct
     manual del curso): si el agente razona en bucle, se corta con elegancia en vez de
-    seguir gastando cuota del LLM.
+    seguir gastando cuota del LLM. Con `session_id`, mantiene **memoria** de la conversación
+    (hilo del checkpointer) para entender preguntas de seguimiento.
     """
+    from uuid import uuid4
+
     from langgraph.errors import GraphRecursionError
 
     agente = _get_agente()
+    # Hilo de memoria por sesión (scopeado a ':agente'); anónimo si no hay sesión.
+    sid = (session_id or "").strip()
+    thread_id = f"{sid}:agente" if sid else f"anon-{uuid4()}"
+    config = {
+        "recursion_limit": settings.agente_max_pasos,
+        "configurable": {"thread_id": thread_id},
+    }
     try:
         # `ejecucion_aislada` activa la caché de herramientas: si el agente repite una
         # llamada idéntica (misma tool + argumento), no se reejecuta y se le avisa que ya
         # tiene esa información → rompe bucles de re-consulta y ahorra cuota.
         with tools.ejecucion_aislada():
-            resultado = agente.invoke(
-                {"messages": [("user", pregunta)]},
-                config={"recursion_limit": settings.agente_max_pasos},
-            )
+            resultado = agente.invoke({"messages": [("user", pregunta)]}, config=config)
     except GraphRecursionError:
         return {
             "respuesta": (

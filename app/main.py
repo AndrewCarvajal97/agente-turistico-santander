@@ -551,6 +551,18 @@ def reload() -> dict:
     return {"status": "ok", "caracteres": n}
 
 
+@app.get("/guia.pdf")
+def descargar_guia():
+    """Descarga la guía turística en PDF: el documento con el que se 'entrena' (indexa)
+    el agente. Pensado para que los examinadores tengan la fuente a la mano."""
+    ruta = Path(settings.pdf_path)
+    if not ruta.exists():
+        raise HTTPException(status_code=404, detail="La guía en PDF no está disponible.")
+    return FileResponse(
+        ruta, media_type="application/pdf", filename="guia_turistica_santander.pdf"
+    )
+
+
 @app.get("/")
 def index():
     archivo = STATIC_DIR / "index.html"

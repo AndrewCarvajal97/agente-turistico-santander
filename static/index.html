@@ -128,6 +128,12 @@
     .wsec{font-weight:800;margin:11px 0 4px;color:var(--ink)}
     .wline{margin:3px 0}
     .wline a{color:var(--yellow);word-break:break-all}
+    .dlpdf{display:inline-flex;align-items:center;gap:7px;margin-top:12px;padding:9px 13px;border-radius:11px;
+      font-weight:700;font-size:.8rem;text-decoration:none;color:#fff;
+      background:linear-gradient(135deg,var(--green-d),var(--green));border:1px solid var(--line);
+      transition:transform .12s,filter .12s}
+    .dlpdf:hover{transform:translateY(-1px);filter:brightness(1.08)}
+    body.hc .dlpdf{background:#fff !important;color:#000 !important;border:1px solid #fff !important}
     .src{font-size:.7rem;color:var(--muted);margin-top:8px}
     details.citas{margin-top:9px}
     details.citas summary{cursor:pointer;color:var(--yellow);font-weight:700;font-size:.74rem;list-style:none}
@@ -172,20 +178,20 @@
 
     footer{position:relative;z-index:10;text-align:center;color:var(--muted);font-size:.72rem;padding:10px 16px 18px}
 
-    /* Alto contraste — negro + texto BLANCO legible; amarillo solo en controles,
-       cian para acentos/activos. Menos "ruido" que bordes amarillos en todo. */
+    /* Alto contraste — blanco y negro limpio (contraste 21:1, sin amarillo cansón).
+       Controles con borde blanco fino; activos/primarios invertidos (blanco sólido). */
     body.hc{background:#000 !important;color:#fff !important}
-    body.hc .glass,body.hc .card,body.hc .box,body.hc .chatwrap,body.hc .destino{
-      background:#000 !important;border:1px solid #fff !important;box-shadow:none !important;backdrop-filter:none !important}
+    body.hc .glass,body.hc .card,body.hc .box,body.hc .chatwrap,body.hc .destino,
     body.hc #input,body.hc .fase,body.hc .qchip,body.hc .tbtn,body.hc .iconbtn,body.hc .subact,body.hc .mic{
-      background:#000 !important;border:2px solid #ff0 !important;color:#ff0 !important;box-shadow:none !important;backdrop-filter:none !important}
-    body.hc .bub{background:#111 !important;border:1px solid #fff !important;color:#fff !important}
-    body.hc .muted,body.hc .desc,body.hc small,body.hc p,body.hc .name,body.hc .about{color:#fff !important}
-    body.hc a,body.hc .wline a{color:#0ff !important}
+      background:#000 !important;border:1px solid #fff !important;color:#fff !important;box-shadow:none !important;backdrop-filter:none !important}
+    body.hc .bub{background:#0a0a0a !important;border:1px solid #fff !important;color:#fff !important}
+    body.hc .muted,body.hc .desc,body.hc small,body.hc p,body.hc .name,body.hc .about,body.hc b{color:#fff !important}
+    body.hc a,body.hc .wline a{color:#7cc7ff !important}   /* enlaces: cian claro, legible */
     body.hc .orb,body.hc .mtns{display:none}
-    body.hc .badge{background:#000 !important;color:#ff0 !important;border:1px solid #ff0 !important}
-    /* Acciones primarias y fase activa: amarillo sólido con texto negro (se ven "encendidas") */
-    body.hc .send,body.hc .fase.on{background:#ff0 !important;border:2px solid #ff0 !important;color:#000 !important;font-weight:800}
+    body.hc .badge{background:#000 !important;color:#fff !important;border:1px solid #fff !important}
+    /* Activos/primarios: invertido (blanco sólido, texto negro) → "encendidos" sin amarillo */
+    body.hc .send,body.hc .fase.on,body.hc .tbtn[aria-pressed="true"]{
+      background:#fff !important;border:1px solid #fff !important;color:#000 !important;font-weight:800}
     body.hc .fase.on b,body.hc .fase.on small{color:#000 !important}
 
     /* Lectura fácil */
@@ -248,6 +254,7 @@
       <div class="box glass">
         <div style="font-size:.66rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--yellow);margin-bottom:8px">Sobre este asistente</div>
         <p class="about">Guía turística con <b>IA</b> del <b>Challenge Alura Agente</b>. Responde desde una <b>guía en PDF</b> usando <b>LangChain</b> (Gemini/Groq/Cohere). Elige la fase <b>Contexto completo</b>, <b>Guía + Web</b> (info actual de internet) o <b>RAG</b> (con citas), identifica lugares <b>por foto</b> y es <b>accesible</b> (voz, contraste, lectura fácil).</p>
+        <a class="dlpdf" href="/guia.pdf" download="guia_turistica_santander.pdf" title="Descargar la guía turística en PDF (documento fuente del agente)">📄 Descargar la guía (PDF)</a>
       </div>
     </aside>
 

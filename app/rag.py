@@ -350,6 +350,21 @@ class RagSantander:
         historial = f"{contexto_conversacion}\n\n" if contexto_conversacion else ""
         return {"input": pregunta, "context": contexto, "historial": historial}, documentos
 
+    def proceso_para(self, documentos) -> list:
+        """Fragmentos recuperados (preview + página + fuente) para el acordeón 'Proceso'.
+
+        Muestra al usuario QUÉ recuperó el RAG antes de redactar (transparencia), sin
+        depender del solape con la respuesta (a diferencia de las citaciones finales).
+        """
+        return [
+            {
+                "preview": _limpiar(d.page_content)[:170] + "…",
+                "pagina": (d.metadata.get("page", 0) or 0) + 1,
+                "fuente": os.path.basename(d.metadata.get("source", "")),
+            }
+            for d in documentos
+        ]
+
     def citaciones_para(self, respuesta: str, documentos) -> list:
         """Citaciones (fragmento + página + fuente) de los documentos que la respuesta usó."""
         if respuesta.strip().rstrip(".!?¡¿").lower() in ("no lo sé", "no lo se"):

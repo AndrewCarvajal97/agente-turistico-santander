@@ -168,6 +168,11 @@ def ask_stream(entrada: PreguntaIn, request: Request) -> StreamingResponse:
             yield _sse({"tipo": "token", "texto": MSG_ERROR})
             yield _sse({"tipo": "fin", "fuente": ""})
             return
+        yield _sse({
+            "tipo": "proceso",
+            "resumen": "Uso la guía completa de Santander como contexto para responder.",
+            "fragmentos": [],
+        })
         partes, ok = [], True
         try:
             for fragmento in agent.preguntar_stream(entrada.pregunta, contexto_conv):
@@ -313,6 +318,12 @@ def rag_ask_stream(entrada: PreguntaIn, request: Request) -> StreamingResponse:
             yield _sse({"tipo": "token", "texto": "No lo sé."})
             yield _sse({"tipo": "fin", "citaciones": []})
             return
+        # Proceso (transparencia): qué recuperó el RAG, antes de redactar la respuesta.
+        yield _sse({
+            "tipo": "proceso",
+            "resumen": f"Consulté la guía y recuperé {len(documentos)} fragmento(s) relevantes.",
+            "fragmentos": rag.proceso_para(documentos),
+        })
         partes = []
         try:
             for fragmento in rag.document_chain.stream(inputs):

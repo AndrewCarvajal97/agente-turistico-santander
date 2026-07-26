@@ -89,6 +89,9 @@ class Settings:
     # Tope de pasos del orquestador ReAct (equivale al max_iterations del curso): evita que
     # el agente razone en bucle y gaste cuota de más. Cada ~2 pasos = 1 uso de herramienta.
     agente_max_pasos: int = int(_get("AGENTE_MAX_PASOS", "12") or 12)
+    # Máximo de revisiones del generador de itinerarios (multiagente). 1 = un solo borrador
+    # (más barato); 2 = una ronda de crítica + mejora. Cada revisión suma llamadas al LLM.
+    itinerario_max_revisiones: int = int(_get("ITINERARIO_MAX_REVISIONES", "1") or 1)
 
     # LangSmith (observabilidad): LangChain lo activa por sí solo leyendo LANGSMITH_*
     # de las variables de entorno (cargadas por load_dotenv). Esto es solo para reportar

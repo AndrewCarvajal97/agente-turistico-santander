@@ -511,6 +511,37 @@ def grafo_combinado_diagrama() -> dict:
         raise HTTPException(status_code=500, detail=f"No se pudo generar el diagrama: {exc}")
 
 
+@app.post("/itinerario")
+def itinerario(entrada: PreguntaIn) -> dict:
+    """Genera un itinerario de viaje por Santander con un **multiagente** (planificar →
+    investigar → redactar → criticar → revisar). Combina la guía (PDF) con la web (Tavily).
+    Costo alto (varias llamadas al LLM); acota con ITINERARIO_MAX_REVISIONES.
+    """
+    try:
+        from . import itinerario as it
+
+        return it.responder(entrada.pregunta)
+    except llm.SinCupoError:
+        raise HTTPException(status_code=503, detail=MSG_SIN_CUPO)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[itinerario] error -> {exc}")
+        raise HTTPException(
+            status_code=503,
+            detail="El generador de itinerarios no está disponible ahora (límite de cuota o config).",
+        )
+
+
+@app.get("/itinerario/diagrama")
+def itinerario_diagrama() -> dict:
+    """Diagrama Mermaid del multiagente de itinerarios."""
+    try:
+        from . import itinerario as it
+
+        return {"mermaid": it.diagrama_mermaid()}
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"No se pudo generar el diagrama: {exc}")
+
+
 @app.post("/reload")
 def reload() -> dict:
     try:
